@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.ipynb_checkpoints/
+
+# SLURM / server stdout — large, machine-specific, regenerated every run.
+# The graded results (results/*.json, *.csv, *.jsonl) ARE tracked.
+results/*.log
+slurm-*.out
+
+# Local env
+.env
+.venv/
+venv/
