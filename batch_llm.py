@@ -34,15 +34,23 @@ logger = logging.getLogger("batch_llm")
 
 
 def _extract_json(text: str) -> dict:
-    """Pull the first JSON object out of a model response; {} on failure."""
+    """
+    Pull the first JSON object out of a model response.
+
+    On failure we DON'T return a bare {} — we return the raw text and the parse
+    error under reserved "_raw"/"_error" keys, so the caller can log exactly WHY
+    an agent fell back to the rule (the whole point of watching fallbacks). The
+    dict still has no "score" key, so every existing fallback check keeps working.
+    """
     try:
-        if "```json" in text:
-            text = text.split("```json")[1].split("```")[0]
-        elif "```" in text:
-            text = text.split("```")[1]
-        return json.loads(text.strip())
-    except Exception:
-        return {}
+        cleaned = text
+        if "```json" in cleaned:
+            cleaned = cleaned.split("```json")[1].split("```")[0]
+        elif "```" in cleaned:
+            cleaned = cleaned.split("```")[1]
+        return json.loads(cleaned.strip())
+    except Exception as e:
+        return {"_raw": text, "_error": f"json-parse: {e}"}
 
 
 class HttpBatchClient:
@@ -78,7 +86,7 @@ class HttpBatchClient:
             return _extract_json(r.json()["choices"][0]["message"]["content"])
         except Exception as e:
             logger.warning(f"batch call failed: {e}")
-            return {}
+            return {"_raw": "", "_error": f"http: {e}"}
 
     def generate_json_batch(self, prompts):
         """Send all prompts concurrently; preserve input order in the output."""

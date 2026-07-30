@@ -1,0 +1,3 @@
+topology,n_days,gross_sharpe,gross_cum,net_sharpe,net_cum,hit_rate,mean_ic_round0,mean_ic_final
+sparse,2,-23.803,-0.0246,-25.001,-0.0275,0.0,-0.3429,-0.3714
+sector,2,-29.032,-0.0263,-29.423,-0.02899,0.0,-0.3429,-0.3429

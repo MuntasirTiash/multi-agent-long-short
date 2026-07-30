@@ -72,10 +72,11 @@ class TranscriptRecorder:
         if self.log_each:
             seen = (" <- saw " + ",".join(f"{p['ticker']}:{p['score']:.0f}"
                                           for p in peers)) if peers else ""
+            # Full thesis, never truncated — we don't want blind spots in the log.
             logger.info("    [%s|%s|r%d] %-5s score=%5.1f %-7s conf=%.2f | %s%s",
                         date, topology, message.round_num, message.ticker,
                         message.score, message.direction.value,
-                        message.confidence, message.thesis[:60], seen)
+                        message.confidence, message.thesis, seen)
 
     def count(self):
         return self._n

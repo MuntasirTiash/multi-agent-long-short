@@ -6,8 +6,18 @@ __pycache__/
 
 # SLURM / server stdout — large, machine-specific, regenerated every run.
 # The graded results (results/*.json, *.csv, *.jsonl) ARE tracked.
-results/*.log
+# Note the ** : per-run logs live in results/{run_tag}/run.log, so a bare
+# results/*.log would miss them.
+results/**/*.log
 slurm-*.out
+
+# One 92 MB transcript from a 498-name daily run — too large for git history.
+# Every other per-run transcript.jsonl is tracked as usual.
+results/daily_20260729_205051_rule-based_full-sparse-sector/transcript.jsonl
+
+# Claude Code: local-only settings and nested git worktrees of this repo.
+.claude/settings.local.json
+.claude/worktrees/
 
 # Local env
 .env

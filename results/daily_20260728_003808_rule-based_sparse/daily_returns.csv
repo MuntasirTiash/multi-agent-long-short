@@ -1,0 +1,2 @@
+date,topology,gross_ret,net_ret,turnover,rank_ic_round0,rank_ic_final,manager_source,longs,shorts,rationale
+2024-12-31,sparse,0.004686706912855544,0.0026867069128555443,1.0,-0.2571428571428571,-0.3142857142857143,rule,CRM|NVDA|AAPL|MSFT|CSCO,IBM,"Rank-and-size: long top 5, short bottom 1, weighted by confidence x |score-50|."

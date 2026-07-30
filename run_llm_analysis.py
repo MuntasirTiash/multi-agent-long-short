@@ -96,7 +96,8 @@ def grade_and_log(label, messages, fwd):
 def main():
     batch_client = build_batch_client()
     topologies = os.getenv("TOPOLOGIES", "full,sparse,sector").split(",")
-    tickers = list(config.UNIVERSE.keys())[:int(os.getenv("DEMO_N", 30))]
+    all_tickers = list(config.UNIVERSE.keys())
+    tickers = all_tickers[:int(os.getenv("DEMO_N", len(all_tickers)))]
     sectors = config.UNIVERSE
 
     log.info("Loading prices for %d stocks (%s -> %s), cache-first ...",
@@ -104,8 +105,14 @@ def main():
     prices = load_prices(tickers, START, END)
     dates = rebalance_dates(prices, STEP_DAYS, MOM_LOOKBACK, HORIZON)
     dates = dates[:int(os.getenv("MAX_DATES", len(dates)))]
-    log.info("%d rebalance dates (%s -> %s); topologies=%s; rounds=%d",
-             len(dates), dates[0], dates[-1], topologies, config.N_ROUNDS)
+    # See config.FEATURE_SET. Built once: it indexes the OHLCV history so the
+    # per-date cost stays flat across the walk-forward.
+    from features import make_feature_fn
+    feature_fn = make_feature_fn(prices, tickers, START, END, sectors,
+                                 MOM_LOOKBACK, REV_LOOKBACK)
+    log.info("%d rebalance dates (%s -> %s); topologies=%s; rounds=%d; "
+             "features=%s", len(dates), dates[0], dates[-1], topologies,
+             config.N_ROUNDS, config.FEATURE_SET)
 
     labels = ["no-comm (round 0)"] + [f"comm: {t}" for t in topologies]
     ics = {k: [] for k in labels}
@@ -123,7 +130,7 @@ def main():
     for i, asof in enumerate(dates, 1):
         log.info("==== [%d/%d] rebalance %s ==============================",
                  i, len(dates), asof)
-        feats = compute_features(prices, asof, MOM_LOOKBACK, REV_LOOKBACK)
+        feats = feature_fn(asof)
         fwd = forward_returns(prices, asof, HORIZON)
         fwd_series.append(fwd)
 

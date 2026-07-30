@@ -363,3 +363,8 @@ LLM pass, it's a clean matched comparison.
 - No borrow-cost/short-availability model for the short leg yet (Phase 3).
 
 See `../agent-orchestration-gap-analysis.md` §6 for the full roadmap.
+
+% Scale up to 500 S&P firms
+% New topology: hierarcical industry leaders
+% co-mention in the news heading and abstract; build a bridge between these agents
+% 

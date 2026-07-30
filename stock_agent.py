@@ -8,9 +8,6 @@ Each agent owns exactly one ticker. It does two things:
 
 There are TWO ways an agent can reason:
 
-  * RULE-BASED (Phases 0-1, zero cost, no model): a simple arithmetic blend of
-    the momentum/value signals. Used when no LLM client is provided.
-
   * LLM-BASED (Phase 2): a local, open-source Qwen2.5 model reads a short prompt
     and returns the same four fields as JSON. Used when an LLM client is passed
     in (see llm.make_llm_client). If the small model returns something
@@ -96,8 +93,8 @@ class StockAgent:
     # ------------------------------------------------------------------
     SYSTEM = ("You are a disciplined equity analyst. You rate one stock's "
               "attractiveness to BUY (go long) over the next week on a 0-100 "
-              "scale, where scores are RELATIVE to the other Dow-30 stocks. "
-              "Answer only with the requested JSON.")
+              "scale, where scores are RELATIVE to the other large-cap US "
+              "stocks in the universe. Answer only with the requested JSON.")
 
     SCHEMA = {"score": "number 0-100, higher = better long",
               "direction": "one of LONG, SHORT, NEUTRAL",
@@ -105,10 +102,26 @@ class StockAgent:
               "thesis": "<= 50 word justification"}
 
     def initial_prompt(self, stock_data: Dict) -> str:
+        # With the extended feature set (features.compute_extended_features) the
+        # stock gets a full analyst brief, rendered as cross-sectional
+        # percentiles plus a few natural-unit levels. With the basic two-feature
+        # set (data_loader.compute_features) it falls back to the original two
+        # normalised signals, so both feature paths work unchanged.
+        brief = ""
+        if "momentum_pct" in stock_data:
+            from features import describe
+            brief = describe(stock_data)
+        if brief:
+            return (
+                f"Stock: {self.ticker} (sector: {self.sector}).\n"
+                f"Where this stock stands against the rest of the universe "
+                f"(percentiles: 100 = best in the universe on that signal):\n"
+                f"{brief}\n"
+                f"Rate {self.ticker}'s attractiveness to go long next week.")
         return (
             f"Stock: {self.ticker} (sector: {self.sector}).\n"
             f"Cross-sectional signals, each normalised -1 (worst) to +1 (best) "
-            f"versus the 30 Dow stocks:\n"
+            f"versus every other stock in the universe:\n"
             f"  3-month momentum: {stock_data.get('momentum', 0):+.2f}\n"
             f"  short-term reversal: {stock_data.get('value', 0):+.2f}\n"
             f"Rate {self.ticker}'s attractiveness to go long next week.")

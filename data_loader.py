@@ -6,12 +6,18 @@ adjusted-close prices and computes two price-based features per stock.
 
 Design choices that matter for research validity:
 
-  * CACHE-FIRST (like FAgent/data): we download once to `price_cache/` and read
-    from disk afterwards, so runs are fast, reproducible, and work offline on
-    HPC compute nodes with no internet.
+  * CACHE-FIRST: prices live in `data/price_cache/{TICKER}_{START}_{END}.csv` and
+    are read from disk, so runs are fast, reproducible, and work offline on HPC
+    compute nodes with no internet. `download_prices.py` populates the whole
+    universe up front and owns the download + file format; a cache miss here
+    calls into it as a convenience, which is the fragile path on a compute node.
 
-  * ZERO-COST source: Yahoo Finance's public chart endpoint, hit directly with
-    `requests`. No API key, no `yfinance` install, no paid data vendor.
+  * ZERO-COST source: Yahoo Finance's public chart endpoint. No API key, no
+    `yfinance` install, no paid data vendor.
+
+  * COLUMNS: the cache stores date/open/high/low/close/adjclose/volume/dividend/
+    split_ratio. `load_prices` returns just the adjusted-close series (what every
+    feature and forward return is built from); `load_ohlcv` returns everything.
 
   * POINT-IN-TIME: features at a rebalance date `asof` are computed using ONLY
     prices dated <= asof. The forward return used to *grade* those features
@@ -27,47 +33,55 @@ as a Phase-3 refinement, not needed for this preliminary pipeline check.
 """
 
 import csv
-import datetime as dt
-import json
 import math
 import os
 import time
 
-import requests
-
-CACHE_DIR = os.path.join(os.path.dirname(__file__), "price_cache")
-_YAHOO = "https://query1.finance.yahoo.com/v8/finance/chart/{ticker}"
+CACHE_DIR = os.path.join(os.path.dirname(__file__), "data", "price_cache")
 
 
 # --------------------------------------------------------------------------
-# 1. Download + cache daily adjusted-close prices
+# 1. Read the cache (populated by download_prices.py)
 # --------------------------------------------------------------------------
-def _to_epoch(date_str: str) -> int:
-    d = dt.datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=dt.timezone.utc)
-    return int(d.timestamp())
-
-
 def _cache_path(ticker: str, start: str, end: str) -> str:
     return os.path.join(CACHE_DIR, f"{ticker}_{start}_{end}.csv")
 
 
-def _fetch_from_yahoo(ticker: str, start: str, end: str):
-    """Return list of (date_str, adjclose) for one ticker from Yahoo."""
-    url = _YAHOO.format(ticker=ticker)
-    params = {"period1": _to_epoch(start), "period2": _to_epoch(end),
-              "interval": "1d"}
-    r = requests.get(url, params=params,
-                     headers={"User-Agent": "Mozilla/5.0"}, timeout=30)
-    r.raise_for_status()
-    result = r.json()["chart"]["result"][0]
-    timestamps = result["timestamp"]
-    adj = result["indicators"]["adjclose"][0]["adjclose"]
-    rows = []
-    for ts, price in zip(timestamps, adj):
-        if price is None:
-            continue
-        date = dt.datetime.utcfromtimestamp(ts).strftime("%Y-%m-%d")
-        rows.append((date, float(price)))
+def _download(ticker: str, start: str, end: str, path: str):
+    """
+    Fill one cache miss, writing the full OHLCV+events schema.
+
+    Delegates to download_prices so there is exactly ONE place that knows the
+    cache file format. Use `python download_prices.py` directly to populate a
+    whole universe up front — that is the supported path for large universes and
+    for compute nodes, where a lazy per-ticker download is fragile.
+    """
+    from download_prices import fetch, write_csv
+    write_csv(path, fetch(ticker, start, end))
+    time.sleep(0.3)           # be polite to the free endpoint
+
+
+def _read_cached(path: str):
+    """
+    Read one cached CSV -> list of row dicts, chronological.
+
+    Handles both the current wide schema (date,open,high,low,close,adjclose,
+    volume,dividend,split_ratio) and the legacy two-column date,adjclose files,
+    so an old cache directory still loads. Numeric fields become floats; blanks
+    become None.
+    """
+    with open(path, newline="") as f:
+        rows = []
+        for raw in csv.DictReader(f):
+            row = {"date": raw["date"]}
+            for key, value in raw.items():
+                if key == "date":
+                    continue
+                try:
+                    row[key] = float(value) if value not in ("", None) else None
+                except ValueError:
+                    row[key] = None
+            rows.append(row)
     return rows
 
 
@@ -75,24 +89,32 @@ def load_prices(tickers, start: str, end: str):
     """
     Load {ticker: [(date, adjclose), ...]} for all tickers, cache-first.
 
-    Downloads any ticker not already cached, then reads everything from disk.
+    The adjusted-close series is what every feature and forward return is built
+    from, so this stays the primary loader and its return shape is unchanged.
+    Call `load_ohlcv` when you need the other columns.
+    """
+    return {t: [(r["date"], r["adjclose"]) for r in series
+                if r.get("adjclose") is not None]
+            for t, series in load_ohlcv(tickers, start, end).items()}
+
+
+def load_ohlcv(tickers, start: str, end: str):
+    """
+    Load {ticker: [row_dict, ...]} with every cached column, cache-first.
+
+    Each row has date/open/high/low/close/adjclose/volume/dividend/split_ratio
+    (missing keys on a legacy two-column cache file). This is the hook for
+    features the adjusted close alone cannot express — dollar volume, true
+    range, overnight gaps — none of which are wired into compute_features yet.
     """
     os.makedirs(CACHE_DIR, exist_ok=True)
-    prices = {}
+    out = {}
     for ticker in tickers:
         path = _cache_path(ticker, start, end)
         if not os.path.exists(path):
-            rows = _fetch_from_yahoo(ticker, start, end)
-            with open(path, "w", newline="") as f:
-                writer = csv.writer(f)
-                writer.writerow(["date", "adjclose"])
-                writer.writerows(rows)
-            time.sleep(0.3)   # be polite to the free endpoint
-        with open(path) as f:
-            reader = csv.reader(f)
-            next(reader)      # skip header
-            prices[ticker] = [(d, float(p)) for d, p in reader]
-    return prices
+            _download(ticker, start, end, path)
+        out[ticker] = _read_cached(path)
+    return out
 
 
 # --------------------------------------------------------------------------
