@@ -1,9 +1,0 @@
-date,gross_ret,net_ret,turnover,longs,shorts,source,rationale
-2024-12-31,0.004468496369068112,0.0024684963690681117,1.0,CRM|NVDA|AMZN|AAPL|AXP,JNJ|VZ|UNH|MRK|DOW,rule,"Rank-and-size: long top 5, short bottom 5, weighted by confidence x |score-50|."
-2025-01-02,0.001116664632120525,0.0002381953570193303,0.4392346375505974,CRM|AMZN|WMT|BA|AAPL,DOW|JNJ|UNH|MRK|VZ,rule,"Rank-and-size: long top 5, short bottom 5, weighted by confidence x |score-50|."
-2025-01-03,0.01182134362693285,0.011005915551872723,0.4077140375300636,CRM|BA|AMZN|WMT|AAPL,CVX|AMGN|JNJ|UNH|VZ,rule,"Rank-and-size: long top 5, short bottom 5, weighted by confidence x |score-50|."
-2025-01-06,-0.013183425170568452,-0.014804610428380254,0.8105926289059011,CRM|BA|HON|AAPL|V,CVX|DOW|JNJ|MRK|UNH,rule,"Rank-and-size: long top 5, short bottom 5, weighted by confidence x |score-50|."
-2025-01-07,0.002536620540160072,0.001998541588158984,0.26903947600054384,CRM|HON|AAPL|BA|V,CVX|JNJ|UNH|MRK|AMGN,rule,"Rank-and-size: long top 5, short bottom 5, weighted by confidence x |score-50|."
-2025-01-08,-0.01463032907226726,-0.015599240998207928,0.4844559629703335,CRM|BA|DIS|AAPL|V,CVX|MRK|HD|UNH|AMGN,rule,"Rank-and-size: long top 5, short bottom 5, weighted by confidence x |score-50|."
-2025-01-10,-0.020705950259680715,-0.021963814060043923,0.6289319001816046,CRM|V|DIS|GS|AMZN,JNJ|MRK|HD|UNH|AMGN,rule,"Rank-and-size: long top 5, short bottom 5, weighted by confidence x |score-50|."
-2025-01-13,0.007260199565191236,0.006361885316038419,0.44915712457640844,CRM|AMZN|DIS|V|AXP,DOW|JNJ|UNH|MRK|AMGN,rule,"Rank-and-size: long top 5, short bottom 5, weighted by confidence x |score-50|."

@@ -1,5 +1,0 @@
-date,topology,gross_ret,net_ret,turnover,rank_ic_round0,rank_ic_final,manager_source,longs,shorts,rationale
-2024-12-31,sparse,-0.02057672086623459,-0.022576720866234593,1.0,-0.2571428571428571,-0.3142857142857143,rule,CRM|NVDA|AAPL|MSFT|CSCO,NVDA|AAPL|MSFT|CSCO|IBM,"Rank-and-size: long top 5, short bottom 5, weighted by confidence x |score-50|."
-2024-12-31,sector,-0.020434417036150412,-0.022434417036150414,1.0,-0.2571428571428571,-0.2571428571428571,rule,CRM|NVDA|AAPL|CSCO|MSFT,NVDA|AAPL|CSCO|MSFT|IBM,"Rank-and-size: long top 5, short bottom 5, weighted by confidence x |score-50|."
-2025-01-02,sparse,-0.004111537099445586,-0.005040966902132814,0.46471490134361426,-0.42857142857142855,-0.42857142857142855,rule,CRM|AAPL|NVDA|CSCO|MSFT,AAPL|NVDA|CSCO|MSFT|IBM,"Rank-and-size: long top 5, short bottom 5, weighted by confidence x |score-50|."
-2025-01-02,sector,-0.005987234754855908,-0.006710274514946602,0.3615198800453472,-0.42857142857142855,-0.42857142857142855,rule,CRM|AAPL|NVDA|CSCO|MSFT,AAPL|NVDA|CSCO|MSFT|IBM,"Rank-and-size: long top 5, short bottom 5, weighted by confidence x |score-50|."

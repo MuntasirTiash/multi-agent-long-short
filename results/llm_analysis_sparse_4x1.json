@@ -1,0 +1,18 @@
+{
+  "no-comm (round 0)": {
+    "mean_ic": -0.4472135954999579,
+    "gross_cum": 0.0,
+    "net_cum": -0.0020000000000000018,
+    "sharpe": 0.0,
+    "percentile": 0.0,
+    "p_value": 1.0
+  },
+  "comm: sparse": {
+    "mean_ic": 0.0,
+    "gross_cum": 0.0,
+    "net_cum": -0.0020000000000000018,
+    "sharpe": 0.0,
+    "percentile": 0.0,
+    "p_value": 1.0
+  }
+}

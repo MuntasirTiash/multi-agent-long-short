@@ -177,6 +177,59 @@ cheapest and most revealing control** and I would run it first.
 
 ---
 
+## 2b. Implementation status and measured behaviour (2026-07-30)
+
+**T4, T5a, T5b and T7 are implemented**: `topology.py` (graph builders, `resolve_degree`,
+`symmetrise`, `correlation_topology`), `correlation.py` (`RollingCorrelation`, `make_topology_fn`,
+`degree_report`), config knobs, and `topology_report.py` to characterise any topology before spending
+GPU time. Both walk-forward scripts build graphs through `make_topology_fn(...)`. `sparse` with
+`SPARSE_MODE="absolute"` reproduces the legacy graph exactly, so old runs still replay.
+
+Measured on the 498-name universe (`python topology_report.py`):
+
+| Topology | out-degree | in-degree | isolated | unheard | ~tok/prompt |
+|---|---|---|---|---|---|
+| `full` | 497 | 497 | 0 | 0 | 3,131 |
+| `sector` | 20–78 (mean 54) | same | 0 | 0 | 386 |
+| `sparse(3)` legacy | 3 | 0–11 | 0 | 23 | 69 |
+| `sparse(pct=10%)` | 50 | 30–72 | 0 | 0 | 360 |
+| `sparse(10%, sym)` | 75–116 (mean 95) | same | 0 | 0 | 638 |
+| `corr_topk(10)` | 10 | 0–83 | 0 | 11–27 | 112 |
+| `corr_anti(10)` | 10 | **0–370** | 0 | **100–291** | 112 |
+| `corr_threshold(0.5)` | **0–50 (mean 19–46)** | 0–285 | 3–23 | 10–23 | 167–335 |
+
+Five findings that shape how these must be used:
+
+1. **A fixed correlation threshold is not comparable across dates.** Median pairwise correlation was
+   **+0.19** on 2024-12-31 but **+0.47** on 2025-07-02 — market-wide co-movement is regime-dependent.
+   The same τ=0.5 therefore produced mean degree 23 on one date and 46 on the other. `corr_topk` holds
+   degree fixed by construction and is the comparable form; treat `corr_threshold` as a study of
+   *breadth of co-movement* rather than a controlled topology.
+2. **The `CORR_MAX_DEGREE` cap binds across the whole plausible τ range.** Uncapped mean degree is 210
+   at τ=0.3, 92 at τ=0.5, 24 at τ=0.7. Even τ=0.8 leaves ~299 of 498 agents isolated while a few still
+   exceed 50. There is no τ that is simultaneously selective and even — which is the finding, not a
+   bug to fix.
+3. **Daily and monthly rewiring are materially different experiments.** Jaccard edge overlap against
+   an anchor date: **+1d 80%, +5d 68%, +21d 28%, +63d 15%** (`corr_topk`). Monthly rewiring keeps only
+   ~a quarter of the edges, so `CORR_REFRESH` 1 vs 21 is a real arm, as decided in §8.
+4. **`corr_anti` is a hub topology.** A few idiosyncratic names are the least-correlated peer for
+   hundreds of agents (in-degree up to 370, with 291 agents unheard). So anti-correlation does not just
+   invert the information — it changes the *structure* to hub-and-spoke, which overlaps T9's question.
+   Worth reporting in-degree concentration alongside any result.
+5. **Dual-class listings are excluded by default** (`CORR_EXCLUDE_SAME_ISSUER`). GOOG/GOOGL correlate
+   at 0.996, FOX/FOXA at 0.991, and NWS/NWSA likewise, because they are one issuer — so a correlation
+   graph would always pair them and the "peer opinion" would be the same company's own view echoed
+   back. With exclusion, GOOGL's top peer becomes AMZN (0.70).
+
+Sanity check worth noting: with no GICS input at all, `corr_topk` reconstructs industry structure from
+returns alone — ACGL's peers come out as EG/AIZ/MET/CINF/HIG/ALL/AFL/PRU (all insurers), Agilent's as
+MTD/RVTY/WAT/TMO/DHR/IQV (all life-science tools), ADI's as NXPI/TXN/MCHP/KLAC/LRCX/AMAT/QCOM
+(all semiconductors). That is independent evidence the correlation math is right, and it sets up T12
+(correlation clusters vs GICS sectors) as a fair fight.
+
+**Degree-matched control:** `sector` has mean degree 54.1, so its matched random control is
+`SPARSE_PCT = 0.109`. `corr_topk(10)`'s control is `sparse(degree=10)`.
+
 ## 3. The methodological point that governs all of this
 
 **Degree and structure are currently confounded.** `full`(497) vs `sector`(54) vs `sparse`(3) differ
@@ -291,17 +344,41 @@ PLACEBO_SHUFFLE_PEERS = False      # the placebo control of §3
 
 ---
 
-## 8. Open questions
+## 8. Decisions (settled 2026-07-30)
 
-1. **Correlation sign** — signed or absolute? (Affects whether hedges count as informative peers.)
-2. **Rewiring frequency** — is a monthly graph acceptable, or is a daily-rewired graph part of the
-   research claim?
-3. **Leader definition** — strictly largest market cap, or largest *within* a liquidity screen? And
-   should a leader also trade its own book, or only aggregate?
-4. **Leader scope** — do leaders talk to *each other* (a leader council / second-tier graph), or only
-   upward to the manager? A leader council is a natural T6 variant and cheap to add.
-5. **Does the hierarchical setting keep the 498-agent tier 1**, or do leaders read raw features
-   directly (making it 11 agents, far cheaper but a different experiment)?
-6. **How many topologies per GPU run?** At 498 firms a weekly walk-forward across 3 topologies is
-   ~258k LLM calls; each added topology is ~74k more. The experiment grid needs to be chosen against a
-   GPU-hour budget, not enumerated exhaustively.
+These were open questions; they are now answered and are the spec to build against.
+
+1. **Correlation sign — build BOTH.** Signed (`corr >= τ`, co-movers) and absolute (`|corr| >= τ`,
+   including strong negatives) are separate configurations, not one with a default, because they
+   frame different questions. `CORR_ABS` selects; both get run.
+2. **Rewiring frequency — test BOTH.** Daily-rewired and monthly-rewired graphs are both
+   experimental arms. `CORR_REFRESH = 1` and `21`. Cost is affordable either way (measured ~8 min vs
+   ~25 s of correlation computation over a 373-date run), so this is a research variable rather than
+   a budget compromise.
+3. **Leader definition — strictly largest market cap**, and try both metrics: the dollar-volume proxy
+   first (available now, unblocks the build) and real point-in-time market cap from SEC XBRL once
+   fetched, so the two can be compared. **The leader aggregates every firm in its industry including
+   itself** — it is a member of its own industry, not an outside observer, so its own ticker is
+   eligible for its own long/short nominations.
+4. **Leaders talk to each other — yes.** A second-tier "leader council" graph runs between the 11
+   leaders after they form their industry views, before the manager aggregates. This makes T6 a
+   genuinely two-level communication structure, and the council's own topology is itself a variable
+   (start `full` — 11 agents is cheap — with `sector`-style variants later).
+5. **Tier 1 stays all 498 agents; tier 2 is the leaders.** Leaders do not read raw features in place
+   of the stock agents; they read their industry's agent opinions. The full three-tier pipeline of §2
+   stands as written.
+6. **Topologies per GPU run — determine empirically, keep the GPU saturated without making a job
+   run long.** This is why token/time instrumentation landed first (`instrumentation.py`): every run
+   now reports calls, tokens and seconds per round, per-stage totals, measured throughput, and a
+   projection to the full date range including **marginal hours per additional topology**. The
+   procedure: run 2-3 dates on the GPU, read the projection, then choose the grid that fills the job's
+   time limit. A rule-based run gives the token forecast for free (no GPU), and `token_usage.csv` in
+   the run directory holds the per-round detail.
+
+Still genuinely open, and worth deciding before Phase 3:
+
+- **Threshold values** for `CORR_THRESHOLD` — must be calibrated against the measured degree
+  distribution, the same trap as the manager's score gate (§2).
+- **Whether the leader council replaces or supplements** the manager's own cross-industry view.
+- **Whether a flexible-size book needs the matched Monte-Carlo null** before any topology result is
+  quoted with a p-value (see §7 item 9).

@@ -94,6 +94,8 @@ def grade_and_log(label, messages, fwd):
 
 
 def main():
+    from instrumentation import TokenCounter, UsageLog
+    usage = UsageLog(TokenCounter(os.getenv("LLM_MODEL")))
     batch_client = build_batch_client()
     topologies = os.getenv("TOPOLOGIES", "full,sparse,sector").split(",")
     all_tickers = list(config.UNIVERSE.keys())
@@ -104,12 +106,15 @@ def main():
              len(tickers), START, END)
     prices = load_prices(tickers, START, END)
     dates = rebalance_dates(prices, STEP_DAYS, MOM_LOOKBACK, HORIZON)
+    total_dates = len(dates)              # before MAX_DATES, for the projection
     dates = dates[:int(os.getenv("MAX_DATES", len(dates)))]
     # See config.FEATURE_SET. Built once: it indexes the OHLCV history so the
     # per-date cost stays flat across the walk-forward.
     from features import make_feature_fn
     feature_fn = make_feature_fn(prices, tickers, START, END, sectors,
                                  MOM_LOOKBACK, REV_LOOKBACK)
+    from correlation import make_topology_fn
+    topo_fn = make_topology_fn(tickers, sectors, START, END)
     log.info("%d rebalance dates (%s -> %s); topologies=%s; rounds=%d; "
              "features=%s", len(dates), dates[0], dates[-1], topologies,
              config.N_ROUNDS, config.FEATURE_SET)
@@ -140,7 +145,8 @@ def main():
         seed_bus = MessageBus(build_topology("full", tickers, sectors))
         round0 = BatchScheduler(agents, seed_bus, batch_client, config.N_ROUNDS,
                                 recorder=recorder, date=asof,
-                                topology="round0-shared").initial_round(feats)
+                                topology="round0-shared",
+                                usage=usage).initial_round(feats)
 
         def record(label, msgs):
             ic, spread, longs, shorts = grade_and_log(label, msgs, fwd)
@@ -155,15 +161,15 @@ def main():
 
         # Replay revision rounds from the same round-0 for each topology.
         for topo in topologies:
-            bus = MessageBus(build_topology(topo, tickers, sectors,
-                                            degree=config.SPARSE_DEGREE,
-                                            seed=config.SEED))
+            bus = MessageBus(topo_fn(topo, asof))
             for msg in round0.values():
                 bus.post(msg)
             final = BatchScheduler(agents, bus, batch_client, config.N_ROUNDS,
                                    recorder=recorder, date=asof,
-                                   topology=topo).revision_rounds()
+                                   topology=topo,
+                                   usage=usage).revision_rounds()
             record(f"comm: {topo}", final)
+        topo_fn.advance()          # tick the correlation refresh counter
 
     log.info("Transcript complete: %d agent messages -> %s",
              recorder.count(), transcript_path)
@@ -198,6 +204,8 @@ def main():
            f"_{len(tickers)}x{len(dates)}.json")
     with open(out, "w") as f:
         json.dump(results, f, indent=2)
+    usage.report(total_dates=total_dates, n_topologies=len(topologies))
+    usage.write_csv(out.replace(".json", "_token_usage.csv"))
     print(f"\nSaved -> {out}")
     print("Read: does any 'comm' row beat 'no-comm' on netCum% AND clear the "
           "null (low p)?")

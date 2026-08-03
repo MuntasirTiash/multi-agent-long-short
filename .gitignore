@@ -11,9 +11,14 @@ __pycache__/
 results/**/*.log
 slurm-*.out
 
-# One 92 MB transcript from a 498-name daily run — too large for git history.
-# Every other per-run transcript.jsonl is tracked as usual.
+# Oversized transcripts from 498-name runs. Every other transcript.jsonl is
+# tracked as usual; these are excluded by size, not by kind. The two 220 MB
+# files are over GitHub's 100 MB hard cap and would have the push rejected.
+# A 498-agent multi-round run emits ~220 MB of transcript, so check the size of
+# any new full-universe run before staging it and add it here if it is large.
 results/daily_20260729_205051_rule-based_full-sparse-sector/transcript.jsonl
+results/transcript_sparse-sector-corr_topk_498x32.jsonl
+results/daily_20260730_023813_LLM-transformers_sparse-sector-corr_topk/transcript.jsonl
 
 # Claude Code: local-only settings and nested git worktrees of this repo.
 .claude/settings.local.json

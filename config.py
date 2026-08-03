@@ -153,12 +153,95 @@ FEATURE_SET = "extended"
 # whose prompt size is independent of the universe.
 TOPOLOGY = "sparse"
 
-# For the "sparse" topology: how many peers each agent talks to.
-SPARSE_DEGREE = 3
+# ---- sparse: how many peers, absolutely or as a share of the cross-section ----
+# "absolute" uses SPARSE_DEGREE (the legacy behaviour, so old runs reproduce);
+# "pct" uses SPARSE_PCT * (N-1), which keeps the share of the universe constant
+# as the universe grows. A fixed degree silently changes the experiment: 3 peers
+# is 10% of the Dow-30 but 0.6% of 498 names. Percentage mode is also how a
+# DEGREE-MATCHED random control is built — see TOPOLOGY_PLAN.md section 3, since
+# comparing full(497 peers) vs sector(54) vs sparse(3) otherwise confounds
+# structure with degree.
+SPARSE_MODE = "pct"
+SPARSE_PCT = 0.10                 # 10% of the cross-section => 50 peers at N=498
+SPARSE_DEGREE = 3                 # used when SPARSE_MODE == "absolute"
+
+# Symmetrise the graph (if A hears B, B hears A). `sparse` and `corr_topk` are
+# naturally DIRECTED — out-degree is exactly k but in-degree varies, so some
+# agents are read by nobody — while `sector`/`full`/`corr_threshold` are
+# symmetric. Set True to remove that confound; note it roughly doubles mean
+# degree, and hence prompt cost.
+SPARSE_SYMMETRIC = False
+
+# ---- correlation-based topologies (corr_topk | corr_threshold | corr_anti) ----
+# Agents are wired by return co-movement rather than by sector: the market's own
+# notion of "peer" instead of the classification agency's.
+CORR_WINDOW = 60                  # trailing trading days of returns
+CORR_REFRESH = 21                 # rebuild the graph every N rebalance dates
+                                  #   1 = daily rewiring, 21 = ~monthly.
+                                  #   BOTH are experimental arms (see
+                                  #   TOPOLOGY_PLAN.md section 8), not a
+                                  #   cost compromise: measured ~8 min vs ~25 s
+                                  #   of correlation over a 373-date run.
+CORR_ABS = False                  # False: signed (co-movers only).
+                                  # True: |corr|, so strongly NEGATIVELY
+                                  # correlated peers connect too — arguably more
+                                  # informative for a long/short book. Both are
+                                  # experimental arms; run each.
+CORR_TOP_K = 10                   # corr_topk / corr_anti: peers per agent.
+                                  # Fixed degree, so it can be degree-matched.
+CORR_THRESHOLD = 0.5              # corr_threshold: minimum correlation for an
+                                  # edge. UNIVERSE-DEPENDENT — calibrate against
+                                  # the measured degree distribution before
+                                  # trusting it (`python topology_report.py`),
+                                  # exactly like LONG_SCORE_THRESHOLD.
+CORR_MAX_DEGREE = 50              # cap for corr_threshold, whose degree is
+                                  # otherwise unbounded and uneven
+
+# Drop edges between share classes of the SAME company (GOOG/GOOGL, FOX/FOXA,
+# NWS/NWSA correlate at 0.99+ precisely because they are one issuer). Without
+# this a correlation graph always pairs them, and the "peer opinion" is that
+# company's own view echoed back rather than external information.
+CORR_EXCLUDE_SAME_ISSUER = True
 
 # How many revision rounds happen after the first independent assessment.
 # The literature suggests 2-3 rounds is the sweet spot (see gap analysis).
 N_ROUNDS = 2
+
+# --------------------------------------------------------------------------
+# Hierarchical industry-leader setting (see hierarchy.py, TOPOLOGY_PLAN.md T6)
+#
+# Tier 1 = all stock agents; tier 2 = one leader per industry, which reads its
+# whole industry's opinions (INCLUDING ITS OWN) and nominates longs/shorts; the
+# leaders then talk to each other (the council) before tier 3, the
+# IndustryManagerAgent, builds the book.
+# --------------------------------------------------------------------------
+HIERARCHY_GROUPING = "sector"      # "sector" (11 groups, 21-79 firms) is the
+                                   # usable level. "sub_industry" has 127 groups
+                                   # averaging 3.9 firms with 26 SINGLETONS that
+                                   # would each be their own leaderless leader.
+
+LEADER_METRIC = "dollar_volume"    # how the leader is chosen, all point-in-time:
+                                   #   "market_cap"    the real definition;
+                                   #                   needs fetch_market_cap.py
+                                   #   "dollar_volume" proxy, no extra data
+                                   #   "random"        the CONTROL that separates
+                                   #                   "the biggest firm knows
+                                   #                   something" from "any
+                                   #                   aggregator helps"
+LEADER_SIZE_WINDOW = 20            # trailing days for the dollar-volume metric
+LEADER_PICKS_PER_SIDE = 3          # longs/shorts each leader nominates
+LEADER_TABLE_CAP = 40              # max industry members shown in one leader
+                                   # prompt (the largest sector has 79; at ~35
+                                   # tokens a row that crowds a 4k window, so
+                                   # over the cap the extremes are shown)
+
+LEADER_COUNCIL_ROUNDS = 1          # 0 disables the council entirely
+LEADER_COUNCIL_TOPOLOGY = "full"   # graph BETWEEN leaders. 11 agents, so "full"
+                                   # is cheap; any topology name works.
+
+INDUSTRY_NEUTRAL = False           # equalise each industry's contribution to the
+                                   # book. Only expressible in this setting,
+                                   # since positions arrive grouped by industry.
 
 # --------------------------------------------------------------------------
 # Reproducibility

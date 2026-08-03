@@ -1,0 +1,4 @@
+date,topology,stage,n_calls,prompt_tokens,completion_tokens,total_tokens,tokens_per_call,wall_s,calls_per_s,tokens_per_s,call_latency_p50,call_latency_p95,fallbacks,token_source
+2024-12-31,round0-shared,round0,4,674,0,674,168.5,269.87,0.0,2.0,14.925,227.209,0,estimated
+2024-12-31,sparse,round1,4,324,0,324,81.0,47.209,0.1,7.0,11.943,12.040,0,estimated
+2024-12-31,sparse,round2,4,330,0,330,82.5,46.455,0.1,7.0,11.649,12.196,0,estimated

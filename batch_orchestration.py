@@ -17,6 +17,7 @@ starting point for several communication topologies:
 """
 
 import logging
+import time
 
 logger = logging.getLogger("batch")
 
@@ -30,7 +31,7 @@ class BatchScheduler:
     """Runs the agent conversation with one batched LLM call per round."""
 
     def __init__(self, agents, bus, batch_client, n_rounds,
-                 recorder=None, date="?", topology="?"):
+                 recorder=None, date="?", topology="?", usage=None):
         self.agents = agents            # ticker -> StockAgent
         self.bus = bus                  # MessageBus (holds the topology)
         self.batch = batch_client       # exposes generate_json_batch(prompts)
@@ -38,10 +39,44 @@ class BatchScheduler:
         self.recorder = recorder        # optional TranscriptRecorder
         self.date = date                # context stamped onto transcript rows
         self.topology = topology
+        self.usage = usage              # optional instrumentation.UsageLog
 
     def _record(self, message, peers_seen=None):
         if self.recorder is not None:
             self.recorder.record(self.date, self.topology, message, peers_seen)
+
+    def _send(self, prompts, stage, fallbacks_after=None):
+        """
+        Run one round's batch, timing it and recording tokens.
+
+        Prefers the server's exact `usage` block; falls back to counting the
+        prompt text locally when the client cannot report usage (in-process
+        model), and says which it used so a budget is never quoted as measured
+        when it was estimated.
+        """
+        t0 = time.time()
+        datas = self.batch.generate_json_batch(prompts)
+        wall = time.time() - t0
+        if self.usage is None:
+            return datas, wall
+
+        from instrumentation import RoundUsage
+        nfb = _count_fallbacks(datas)
+        pt = ct = 0
+        lat, exact = [], False
+        if hasattr(self.batch, "pop_usage"):
+            pt, ct, lat, exact = self.batch.pop_usage()
+        if not exact:
+            # No server-side usage: count the prompts we sent ourselves. Output
+            # tokens stay unknown rather than invented.
+            pt = sum(self.usage.counter.count(p) for p in prompts)
+            ct = 0
+        self.usage.record(RoundUsage(
+            date=self.date, topology=self.topology, stage=stage,
+            n_calls=len(prompts), prompt_tokens=pt, completion_tokens=ct,
+            wall_s=wall, fallbacks=nfb,
+            source="exact" if exact else "estimated", latencies=lat))
+        return datas, wall
 
     def initial_round(self, market_data):
         """Round 0: every agent's independent assessment, in one batch."""
@@ -50,7 +85,7 @@ class BatchScheduler:
                     len(tickers))
         prompts = [self.agents[t].initial_prompt(market_data[t]) for t in tickers]
         fallbacks = [self.agents[t].rule_initial(market_data[t]) for t in tickers]
-        datas = self.batch.generate_json_batch(prompts)
+        datas, wall = self._send(prompts, "round0")
 
         for t, data, fb in zip(tickers, datas, fallbacks):
             msg = self.agents[t].message_from_data(data, 0, fb)
@@ -59,8 +94,8 @@ class BatchScheduler:
                                            msg.score, msg.direction.value)
             self._record(msg)           # full round-0 output per agent
         nfb = _count_fallbacks(datas)
-        logger.info("round 0: %d/%d answered by LLM, %d fell back to rule",
-                    len(tickers) - nfb, len(tickers), nfb)
+        logger.info("round 0: %d/%d answered by LLM, %d fell back to rule "
+                    "(%.1fs)", len(tickers) - nfb, len(tickers), nfb, wall)
         return dict(self.bus.latest)
 
     def revision_rounds(self):
@@ -79,7 +114,7 @@ class BatchScheduler:
                 fallbacks.append(self.agents[t].rule_revise(my_view, peers))
 
             logger.info("round %d: sending %d revision prompts", r, len(prompts))
-            datas = self.batch.generate_json_batch(prompts)
+            datas, wall = self._send(prompts, f"round{r}")
 
             # Compute all revisions off the same snapshot, THEN post them.
             revised = {}
@@ -90,8 +125,8 @@ class BatchScheduler:
             for msg in revised.values():
                 self.bus.post(msg)
             nfb = _count_fallbacks(datas)
-            logger.info("round %d: %d/%d answered by LLM, %d fell back to rule",
-                        r, len(prompts) - nfb, len(prompts), nfb)
+            logger.info("round %d: %d/%d answered by LLM, %d fell back to rule "
+                        "(%.1fs)", r, len(prompts) - nfb, len(prompts), nfb, wall)
         return dict(self.bus.latest)
 
     def run(self, market_data):

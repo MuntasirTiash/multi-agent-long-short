@@ -17,6 +17,7 @@ plan depends on.
 """
 
 import logging
+import time
 from typing import Dict, List
 
 from messages import StockMessage
@@ -46,10 +47,26 @@ class RoundScheduler:
     """Runs the multi-round conversation between stock agents."""
 
     def __init__(self, agents: Dict[str, StockAgent], bus: MessageBus,
-                 n_rounds: int):
+                 n_rounds: int, usage=None, date="?", topology="?"):
         self.agents = agents          # ticker -> StockAgent
         self.bus = bus
         self.n_rounds = n_rounds
+        # Optional instrumentation.UsageLog. On this (rule-based) path no LLM
+        # call happens, so passing one turns the run into a FORECAST: the prompts
+        # that an LLM run would have sent are built and counted, giving a
+        # full-size token budget for zero GPU time. Rows are marked "estimated".
+        self.usage = usage
+        self.date = date
+        self.topology = topology
+
+    def _forecast(self, prompts, stage: str, wall_s: float) -> None:
+        if self.usage is None or not prompts:
+            return
+        # max_tokens on the real clients is 256; charge that as the worst-case
+        # completion so the forecast is an upper bound, not an underestimate.
+        self.usage.estimate_calls(prompts, stage=stage, date=self.date,
+                                  topology=self.topology, wall_s=wall_s,
+                                  completion_tokens_each=256)
 
     def run(self, market_data: Dict[str, Dict]) -> Dict[str, StockMessage]:
         """
@@ -59,21 +76,31 @@ class RoundScheduler:
         """
         # Round 0: every agent forms an independent opinion and posts it.
         logger.info("Round 0: independent assessments")
+        t0 = time.time()
+        prompts = []
         for ticker, agent in self.agents.items():
+            if self.usage is not None:
+                prompts.append(agent.initial_prompt(market_data[ticker]))
             msg = agent.initial_assessment(market_data[ticker])
             self.bus.post(msg)
+        self._forecast(prompts, "round0", time.time() - t0)
 
         # Rounds 1..N: every agent reads its neighbours, then revises.
         for r in range(1, self.n_rounds + 1):
             logger.info(f"Round {r}: revisions after reading peers")
+            t0 = time.time()
             # Read everyone's current view first, THEN post the revisions, so
             # that within a round agents all react to the same snapshot.
             revised: Dict[str, StockMessage] = {}
+            prompts = []
             for ticker, agent in self.agents.items():
                 my_view = self.bus.latest[ticker]
                 peers = self.bus.inbox_for(ticker)
+                if self.usage is not None and peers:
+                    prompts.append(agent.revise_prompt(my_view, peers))
                 revised[ticker] = agent.revise(my_view, peers)
             for msg in revised.values():
                 self.bus.post(msg)
+            self._forecast(prompts, f"round{r}", time.time() - t0)
 
         return dict(self.bus.latest)

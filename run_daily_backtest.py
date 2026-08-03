@@ -49,6 +49,7 @@ import datetime
 import json
 import logging
 import os
+import time
 
 import config
 from data_loader import (load_prices, rebalance_dates, compute_features,
@@ -72,20 +73,39 @@ PERIODS_PER_YEAR = 252           # daily -> annualise Sharpe with sqrt(252)
 # ==========================================================================
 # LLM wiring (all optional; None everywhere -> pure rule-based, zero cost)
 # ==========================================================================
-def _http_manager_llm(base_url, model):
-    """Adapter so the manager reaches vLLM through the same proven HTTP path."""
+def _http_manager_llm(base_url, model, usage=None):
+    """
+    Adapter so the manager reaches vLLM through the same proven HTTP path.
+
+    Because it wraps HttpBatchClient, the manager's tokens come back from the
+    server's own usage block — exact, not estimated, like the agent rounds.
+    """
     from batch_llm import HttpBatchClient
     client = HttpBatchClient(base_url, model, ManagerAgent.SYSTEM,
                              ManagerAgent.SCHEMA, max_tokens=512)
 
     class _Adapter:
+        date, topology = "?", "-"
+
         def generate_json(self, prompt, schema=None, system_message=None):
-            return client.generate_json_batch([prompt])[0]
+            t0 = time.time()
+            out = client.generate_json_batch([prompt])[0]
+            if usage is not None:
+                from instrumentation import RoundUsage
+                pt, ct, lat, exact = client.pop_usage()
+                if not exact:
+                    pt, ct = usage.counter.count(prompt), 0
+                usage.record(RoundUsage(
+                    date=self.date, topology=self.topology, stage="manager",
+                    n_calls=1, prompt_tokens=pt, completion_tokens=ct,
+                    wall_s=time.time() - t0, latencies=lat,
+                    source="exact" if exact else "estimated"))
+            return out
 
     return _Adapter()
 
 
-def build_llm_clients():
+def build_llm_clients(usage=None):
     """
     Return (agent_batch_client, manager_llm, mode_str).
 
@@ -103,7 +123,7 @@ def build_llm_clients():
         log.info("LLM agents : HTTP batch -> %s (%s)", base_url, model)
         agent_batch = HttpBatchClient(base_url, model, StockAgent.SYSTEM,
                                       StockAgent.SCHEMA)
-        manager_llm = _http_manager_llm(base_url, model)
+        manager_llm = _http_manager_llm(base_url, model, usage)
     elif backend == "transformers":
         from batch_llm import SequentialBatchClient
         from llm import make_llm_client
@@ -111,6 +131,11 @@ def build_llm_clients():
         agent_batch = SequentialBatchClient(shared, StockAgent.SYSTEM,
                                             StockAgent.SCHEMA)
         manager_llm = shared              # same in-process model, single call
+        if usage is not None:
+            # FAgent's client returns no usage block, so tokens are counted
+            # locally and labelled estimated.
+            from instrumentation import CountingLLM
+            manager_llm = CountingLLM(shared, usage)
     else:
         raise SystemExit(f"Unknown LLM_BACKEND={backend!r}")
     log.info("LLM manager: single JSON call per day")
@@ -131,18 +156,49 @@ def _usable(data) -> bool:
         return False
 
 
-def _generate(agent_batch, prompts):
-    """LLM batch, or a list of None (=> use the rule, not a fallback)."""
+def _generate(agent_batch, prompts, usage=None, stage="?", date="?", topo="-"):
+    """
+    LLM batch, or a list of None (=> use the rule, not a fallback).
+
+    This is the single choke point where prompts become responses, so it is also
+    where token/time accounting happens (see instrumentation.py). With no LLM the
+    prompts are still counted, which turns a rule-based run into a zero-GPU
+    forecast of what the same run would cost with a model.
+    """
+    t0 = time.time()
     if agent_batch is None:
-        return [None] * len(prompts)
-    return agent_batch.generate_json_batch(prompts)
+        out = [None] * len(prompts)
+    else:
+        out = agent_batch.generate_json_batch(prompts)
+    wall = time.time() - t0
+
+    if usage is not None and prompts:
+        from instrumentation import RoundUsage
+        pt = ct = 0
+        lat, exact = [], False
+        if agent_batch is not None and hasattr(agent_batch, "pop_usage"):
+            pt, ct, lat, exact = agent_batch.pop_usage()
+        if not exact:
+            pt = sum(usage.counter.count(p) for p in prompts)
+            # No server usage: charge the client's max_tokens as a worst-case
+            # completion so a forecast is an upper bound, never an underestimate.
+            ct = 256 * len(prompts) if agent_batch is None else 0
+        nfb = sum(1 for d in out
+                  if d is not None and not (isinstance(d, dict) and "score" in d))
+        usage.record(RoundUsage(
+            date=date, topology=topo, stage=stage, n_calls=len(prompts),
+            prompt_tokens=pt, completion_tokens=ct, wall_s=wall, fallbacks=nfb,
+            source="exact" if exact else "estimated", latencies=lat,
+            llm_called=agent_batch is not None))
+    return out
 
 
-def run_round0(agents, tickers, feats, agent_batch, recorder, date, topo_label):
+def run_round0(agents, tickers, feats, agent_batch, recorder, date, topo_label,
+               usage=None):
     """Round 0: independent assessment. Returns (messages, fallback_events)."""
     prompts = [agents[t].initial_prompt(feats[t]) for t in tickers]
     rules = [agents[t].rule_initial(feats[t]) for t in tickers]
-    datas = _generate(agent_batch, prompts)
+    datas = _generate(agent_batch, prompts, usage, "round0", date, topo_label)
 
     messages, fallbacks = {}, []
     for t, data, rule in zip(tickers, datas, rules):
@@ -158,7 +214,8 @@ def run_round0(agents, tickers, feats, agent_batch, recorder, date, topo_label):
     return messages, fallbacks
 
 
-def run_revision(agents, tickers, bus, r, agent_batch, recorder, date, topo):
+def run_revision(agents, tickers, bus, r, agent_batch, recorder, date, topo,
+                 usage=None):
     """One revision round on `bus`. Returns (messages, fallback_events)."""
     active, prompts, rules, seen = [], [], [], []
     for t in tickers:
@@ -169,7 +226,7 @@ def run_revision(agents, tickers, bus, r, agent_batch, recorder, date, topo):
         seen.append(peers)
         prompts.append(agents[t].revise_prompt(bus.latest[t], peers))
         rules.append(agents[t].rule_revise(bus.latest[t], peers))
-    datas = _generate(agent_batch, prompts)
+    datas = _generate(agent_batch, prompts, usage, f"round{r}", date, topo)
 
     revised, fallbacks = {}, []
     for t, data, rule, peers in zip(active, datas, rules, seen):
@@ -288,7 +345,12 @@ def main():
     log.info("RESULTS DIR: %s", os.path.abspath(run_dir))
     log.info("=" * 70)
 
-    agent_batch, manager_llm, mode = build_llm_clients()
+    # Token + wall-clock accounting for resource budgeting (instrumentation.py).
+    # In rule-based mode no call is made, so this becomes a zero-GPU FORECAST of
+    # what the same run would cost with a model.
+    from instrumentation import TokenCounter, UsageLog
+    usage = UsageLog(TokenCounter(os.getenv("LLM_MODEL")))
+    agent_batch, manager_llm, mode = build_llm_clients(usage)
     # BOOK_SIZING="flexible" hands the position count to the manager itself;
     # "fixed" pins it to N_LONG/N_SHORT. See config.py.
     sizing = os.getenv("BOOK_SIZING", config.BOOK_SIZING)
@@ -306,6 +368,7 @@ def main():
              len(tickers), START, END)
     prices = load_prices(tickers, START, END)
     dates = rebalance_dates(prices, STEP_DAYS, MOM_LOOKBACK, HORIZON)
+    total_dates = len(dates)              # before MAX_DATES, for the projection
     dates = dates[:int(os.getenv("MAX_DATES", len(dates)))]
     # Feature set per config.FEATURE_SET ("extended" adds the technical,
     # risk, volume and cross-sectional features to the prompt; the rule score is
@@ -313,6 +376,10 @@ def main():
     from features import make_feature_fn
     feature_fn = make_feature_fn(prices, tickers, START, END, sectors,
                                  MOM_LOOKBACK, REV_LOOKBACK)
+    # Topology builder. Handles the corr_* family (correlation window, refresh
+    # cadence, caching) as well as full/sparse/sector — see correlation.py.
+    from correlation import make_topology_fn
+    topo_fn = make_topology_fn(tickers, sectors, START, END)
     log.info("MODE=%s | %d DAILY dates (%s -> %s) | topologies=%s | rounds=%d | "
              "manager=%s | features=%s", mode, len(dates), dates[0], dates[-1],
              topologies, n_rounds, "LLM" if manager_llm else "rule",
@@ -334,6 +401,8 @@ def main():
     n_prompts_total, n_fallbacks_total = 0, 0
 
     for i, asof in enumerate(dates, 1):
+        if hasattr(manager_llm, "date"):
+            manager_llm.date = asof          # stamp usage rows with the date
         log.info("\n" + "#" * 70)
         log.info("# [%d/%d] REBALANCE %s", i, len(dates), asof)
         log.info("#" * 70)
@@ -342,8 +411,9 @@ def main():
 
         # ---- Round 0: shared independent assessment (the no-comm baseline) ----
         base_agents = {t: StockAgent(t, sectors[t]) for t in tickers}
+        topo_fn.advance()      # tick the correlation-refresh counter per date
         round0, fb0 = run_round0(base_agents, tickers, feats, agent_batch,
-                                 recorder, asof, "round0-shared")
+                                 recorder, asof, "round0-shared", usage)
         n_prompts_total += len(tickers)
         n_fallbacks_total += len(fb0)
         fb_rows.extend(fb0)
@@ -359,16 +429,14 @@ def main():
             for t in tickers:                       # seed memory with round 0
                 agents[t].memory.remember(asof, round0[t].score,
                                           round0[t].direction.value)
-            bus = MessageBus(build_topology(topo, tickers, sectors,
-                                            degree=config.SPARSE_DEGREE,
-                                            seed=config.SEED))
+            bus = MessageBus(topo_fn(topo, asof))
             for msg in round0.values():
                 bus.post(msg)
 
             final = round0
             for r in range(1, n_rounds + 1):
                 final, fbr = run_revision(agents, tickers, bus, r, agent_batch,
-                                          recorder, asof, topo)
+                                          recorder, asof, topo, usage)
                 n_prompts_total += len(fbr) + sum(
                     1 for t in tickers if bus.inbox_for(t))  # rough, informational
                 n_fallbacks_total += len(fbr)
@@ -379,6 +447,8 @@ def main():
                 log_memory(f"ROUND {r} [{topo}]", agents, tickers)
 
             # ---- Manager builds the book from the final opinions ----
+            if hasattr(manager_llm, "topology"):
+                manager_llm.topology = topo
             book = manager.build(final, sectors)
             if manager_llm is not None and book.source == "rule":
                 rec = {"date": asof, "topology": topo, "round": -1,
@@ -409,8 +479,17 @@ def main():
                 "manager_source": book.source, "longs": "|".join(book.longs),
                 "shorts": "|".join(book.shorts), "rationale": book.rationale})
 
+        # Checkpoint after EVERY date, not just at the end. A daily run over the
+        # full universe takes tens of hours, so waiting for the final write means
+        # no machine-readable output for days — and a SLURM timeout would lose it
+        # entirely, leaving only the log. These files are cheap to rewrite (a few
+        # hundred rows), so they are kept current instead.
+        checkpoint_outputs(run_dir, mode, topologies, dates[:i], series,
+                           daily_rows, fb_rows)
+
     write_outputs(run_dir, mode, topologies, dates, series, daily_rows, fb_rows,
-                  recorder, n_prompts_total, n_fallbacks_total)
+                  recorder, n_prompts_total, n_fallbacks_total, usage,
+                  total_dates)
 
 
 # ==========================================================================
@@ -423,8 +502,62 @@ def _cum(xs):
     return c - 1.0
 
 
+def build_metrics(topologies, dates, series):
+    """Per-topology summary from whatever dates have completed so far."""
+    metrics = {}
+    for topo in topologies:
+        s = series[topo]
+        if not s["gross"]:
+            continue
+        gs = ev.summarize(s["gross"], periods_per_year=PERIODS_PER_YEAR)
+        ns = ev.summarize(s["net"], periods_per_year=PERIODS_PER_YEAR)
+        hit = sum(1 for r in s["net"] if r > 0) / len(s["net"])
+        metrics[topo] = {
+            "n_days": len(s["gross"]),
+            "gross": {"mean": gs["mean"], "vol": gs["std"],
+                      "cum": _cum(s["gross"]), "sharpe": gs["sharpe"]},
+            "net": {"mean": ns["mean"], "vol": ns["std"], "cum": _cum(s["net"]),
+                    "sharpe": ns["sharpe"], "hit_rate": hit},
+            "mean_rank_ic_round0": sum(s["ic0"]) / len(s["ic0"]),
+            "mean_rank_ic_final": sum(s["icF"]) / len(s["icF"])}
+    return metrics
+
+
+def _write_rows(path, rows):
+    if not rows:
+        return
+    with open(path, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+        w.writeheader()
+        w.writerows(rows)
+
+
+def checkpoint_outputs(run_dir, mode, topologies, dates_done, series,
+                       daily_rows, fb_rows):
+    """
+    Rewrite the machine-readable files mid-run, silently.
+
+    Same content as the final write, minus the log summary — so `metrics.json`,
+    `daily_returns.csv` and `fallbacks.csv` are always current for the dates
+    completed so far. Failures here must never kill a long run, hence the guard.
+    """
+    try:
+        metrics = build_metrics(topologies, dates_done, series)
+        with open(os.path.join(run_dir, "metrics.json"), "w") as f:
+            json.dump({"mode": mode, "complete": False,
+                       "n_dates_done": len(dates_done),
+                       "start": dates_done[0] if dates_done else None,
+                       "last": dates_done[-1] if dates_done else None,
+                       "topologies": metrics}, f, indent=2)
+        _write_rows(os.path.join(run_dir, "daily_returns.csv"), daily_rows)
+        _write_rows(os.path.join(run_dir, "fallbacks.csv"), fb_rows)
+    except Exception as e:                 # telemetry must not break the run
+        log.warning("checkpoint write failed (continuing): %s", e)
+
+
 def write_outputs(run_dir, mode, topologies, dates, series, daily_rows, fb_rows,
-                  recorder, n_prompts, n_fallbacks):
+                  recorder, n_prompts, n_fallbacks, usage=None,
+                  total_dates=None):
     metrics = {}
     for topo in topologies:
         s = series[topo]
@@ -444,7 +577,10 @@ def write_outputs(run_dir, mode, topologies, dates, series, daily_rows, fb_rows,
                                    if s["icF"] else 0.0)}
 
     fb_rate = (n_fallbacks / n_prompts) if n_prompts else 0.0
-    run_meta = {"mode": mode, "topologies": topologies, "n_days": len(dates),
+    # complete=True distinguishes the final write from the per-date
+    # checkpoints, so a consumer can tell a finished run from a live one.
+    run_meta = {"mode": mode, "complete": True,
+                "topologies_list": topologies, "n_days": len(dates),
                 "start": dates[0], "end": dates[-1],
                 "roundtrip_bps": ROUNDTRIP_BPS,
                 "llm_prompts_approx": n_prompts, "fallbacks": n_fallbacks,
@@ -501,12 +637,21 @@ def write_outputs(run_dir, mode, topologies, dates, series, daily_rows, fb_rows,
     log.info("Sharpe annualised sqrt(%d); dollar-neutral book; %.0fbps round-trip "
              "on turnover.", PERIODS_PER_YEAR, ROUNDTRIP_BPS)
     log.info("Transcript: %d agent messages.", recorder.count())
+
+    # ---- resource budget: tokens + wall time, and what a full run would cost --
+    log.info("=" * 74)
+    if usage is not None:
+        usage.report(total_dates=total_dates, n_topologies=len(topologies))
+        usage.write_csv(os.path.join(run_dir, "token_usage.csv"))
+    log.info("=" * 74)
+
     log.info("\nRESULTS DIR: %s", os.path.abspath(run_dir))
     log.info("  run.log            full narrative (this log)")
     log.info("  metrics.json/.csv  per-topology Sharpe / cum / IC / hit")
     log.info("  daily_returns.csv  one row per (date, topology)")
     log.info("  fallbacks.csv      every fallback event (%d rows)", len(fb_rows))
     log.info("  transcript.jsonl   every agent message, every round")
+    log.info("  token_usage.csv    tokens + seconds per (date, topology, round)")
 
 
 if __name__ == "__main__":

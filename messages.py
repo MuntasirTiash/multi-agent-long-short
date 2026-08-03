@@ -16,8 +16,9 @@ library helper that turns a class into a plain data record with almost no
 boilerplate.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
+from typing import List
 
 
 class Direction(str, Enum):
@@ -55,3 +56,53 @@ class StockMessage:
         """A one-line human-readable form, handy for logging."""
         return (f"{self.ticker:<5} score={self.score:5.1f} "
                 f"{self.direction.value:<7} conf={self.confidence:.2f}")
+
+
+# --------------------------------------------------------------------------
+# Tier-2 wire format: what an industry leader sends upward
+# --------------------------------------------------------------------------
+# StockMessage stays the format stock agents speak. A leader says something
+# structurally different — a RANKED SHORTLIST for its whole industry plus an
+# industry-level view — so the hierarchy (see hierarchy.py) needs its own record.
+# Keeping them separate means tier-1 code is untouched by tier-2 changes.
+@dataclass
+class IndustryPick:
+    """One name an industry leader nominates, with the score it stands behind."""
+    ticker: str
+    score: float           # 0..100, the leader's own view (may differ from the
+                           # analyst's, which is the point of the tier)
+    direction: Direction
+    thesis: str
+
+    def __post_init__(self):
+        self.score = max(0.0, min(100.0, float(self.score)))
+        self.thesis = trim_thesis(self.thesis)
+
+
+@dataclass
+class IndustryReport:
+    """One industry leader's verdict on its own industry."""
+    industry: str
+    leader: str                                    # the leader's own ticker
+    longs: List["IndustryPick"] = field(default_factory=list)   # best first
+    shorts: List["IndustryPick"] = field(default_factory=list)  # worst first
+    outlook: str = ""                              # <=50 words on the industry
+    round_num: int = 0                             # 0 = first pass, 1+ = council
+    source: str = "rule"                           # "llm" or "rule"
+    n_members: int = 0                             # how many firms it reviewed
+
+    def __post_init__(self):
+        self.outlook = trim_thesis(self.outlook)
+
+    def picks(self) -> List["IndustryPick"]:
+        return list(self.longs) + list(self.shorts)
+
+    def mean_score(self) -> float:
+        """Average score across this industry's picks — its relative standing."""
+        picks = self.picks()
+        return sum(p.score for p in picks) / len(picks) if picks else 50.0
+
+    def summary(self) -> str:
+        return (f"{self.industry:<24} leader={self.leader:<6} "
+                f"L={[p.ticker for p in self.longs]} "
+                f"S={[p.ticker for p in self.shorts]}")

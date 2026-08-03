@@ -1,0 +1,11 @@
+feature,rendered_as,cited,share,n_theses
+3-month momentum,percentile,104,0.2088,498
+1-month momentum,percentile,186,0.3735,498
+1-week reversal,percentile,182,0.3655,498
+momentum vs its sector,percentile,158,0.3173,498
+price vs 50-day average,raw,11,0.0221,498
+RSI(14),raw,4,0.008,498
+annualised volatility,raw,117,0.2349,498
+beta to the market,raw,11,0.0221,498
+volume vs normal,percentile,126,0.253,498
+dividend yield,raw,137,0.2751,498

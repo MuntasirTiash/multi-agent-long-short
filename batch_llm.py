@@ -26,6 +26,8 @@ Both return `{}` for any prompt whose response can't be parsed; the caller
 
 import json
 import logging
+import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 import requests
@@ -65,6 +67,27 @@ class HttpBatchClient:
         self.max_workers = max_workers
         self.temperature = temperature
         self.max_tokens = max_tokens
+        # Token/latency accounting. vLLM returns an exact `usage` block per call,
+        # so a real run reports measured tokens rather than an estimate. Appended
+        # from worker threads, hence the lock.
+        self._acct_lock = threading.Lock()
+        self._acct = []                    # (prompt_tok, completion_tok, seconds)
+
+    def pop_usage(self):
+        """
+        Drain and return this batch's per-call accounting.
+
+        Returns (prompt_tokens, completion_tokens, latencies, exact). `exact` is
+        False if any call came back without a usage block, so the caller can
+        label the number honestly.
+        """
+        with self._acct_lock:
+            acct, self._acct = self._acct, []
+        pt = sum(a[0] for a in acct)
+        ct = sum(a[1] for a in acct)
+        lat = [a[2] for a in acct]
+        exact = bool(acct) and all(a[0] is not None for a in acct)
+        return (pt or 0), (ct or 0), lat, exact
 
     def _format(self, prompt: str) -> str:
         """Append the JSON schema instruction, mirroring FAgent's generate_json."""
@@ -79,14 +102,26 @@ class HttpBatchClient:
             "temperature": self.temperature,
             "max_tokens": self.max_tokens,
         }
+        t0 = time.time()
         try:
             r = requests.post(f"{self.base_url}/chat/completions",
                               json=payload, timeout=120)
             r.raise_for_status()
-            return _extract_json(r.json()["choices"][0]["message"]["content"])
+            body = r.json()
+            usage = body.get("usage") or {}
+            self._account(usage.get("prompt_tokens"),
+                          usage.get("completion_tokens"), time.time() - t0)
+            return _extract_json(body["choices"][0]["message"]["content"])
         except Exception as e:
+            # A failed call still consumed wall time; record it so throughput
+            # numbers reflect what the job actually experienced.
+            self._account(0, 0, time.time() - t0)
             logger.warning(f"batch call failed: {e}")
             return {"_raw": "", "_error": f"http: {e}"}
+
+    def _account(self, prompt_tokens, completion_tokens, seconds):
+        with self._acct_lock:
+            self._acct.append((prompt_tokens, completion_tokens or 0, seconds))
 
     def generate_json_batch(self, prompts):
         """Send all prompts concurrently; preserve input order in the output."""
@@ -104,7 +139,22 @@ class SequentialBatchClient:
         self.llm = llm_client
         self.system = system
         self.schema = schema
+        self._acct = []
+
+    def pop_usage(self):
+        """
+        Same interface as HttpBatchClient, but this client's LLMClient returns
+        only parsed JSON — no usage block — so token counts are left to the
+        caller (exact=False) and only latency is real.
+        """
+        acct, self._acct = self._acct, []
+        return 0, 0, list(acct), False
 
     def generate_json_batch(self, prompts):
-        return [self.llm.generate_json(p, self.schema, system_message=self.system)
-                for p in prompts]
+        out = []
+        for p in prompts:
+            t0 = time.time()
+            out.append(self.llm.generate_json(p, self.schema,
+                                              system_message=self.system))
+            self._acct.append(time.time() - t0)
+        return out
