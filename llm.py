@@ -1,14 +1,15 @@
 """
-llm.py — bridge to FAgent's zero-cost LLMClient.
+llm.py — bridge to the zero-cost LLMClient in llm_utils.py.
 
 Phase 2 gives the agents a real brain: a local, open-source Qwen2.5 model.
-Rather than duplicate the backend logic, we reuse the LLMClient that already
-lives in ../FAgent/utils/llm_utils.py (it supports a rule-based "none" backend,
-a local Ollama/vLLM server, or in-process HuggingFace transformers — never a
-paid API).
+The LLMClient in llm_utils.py (shared with the sibling FAgent project) supports
+a rule-based "none" backend, a local Ollama/vLLM server, or in-process
+HuggingFace transformers — never a paid API.
 
-We load that file directly by path (with importlib) instead of putting FAgent
-on sys.path, so this package's own `config` module can't be shadowed.
+We load that file directly by path (with importlib): the copy bundled in this
+repo by default, or ../FAgent/utils/llm_utils.py when LLM_UTILS_PATH points
+there. Loading by path rather than via sys.path means FAgent's own `config`
+module can never shadow this package's `config`.
 
 Backend is chosen by the LLM_BACKEND environment variable, e.g.:
     export LLM_BACKEND=transformers LLM_MODEL=Qwen/Qwen2.5-0.5B-Instruct
@@ -21,8 +22,8 @@ agents fall back to their Phase-0 rule-based logic (still zero cost).
 import importlib.util
 import os
 
-_LLM_UTILS = os.path.abspath(os.path.join(
-    os.path.dirname(__file__), "..", "FAgent", "utils", "llm_utils.py"))
+_LLM_UTILS = os.path.abspath(os.getenv(
+    "LLM_UTILS_PATH", os.path.join(os.path.dirname(__file__), "llm_utils.py")))
 
 # Default to the smallest instruct model so it runs even on a CPU login node;
 # use 7B/14B on a GPU compute node for real experiments.

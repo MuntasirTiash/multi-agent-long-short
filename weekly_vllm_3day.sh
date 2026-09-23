@@ -21,7 +21,7 @@
 # no-comm baseline and the treatments see identical analyst opinions.
 #
 # NOTE this script grades EQUAL-WEIGHT top-N/bottom-N books and never touches
-# ManagerAgent, so manager settings cannot move these numbers (see CLAUDE.md).
+# ManagerAgent, so manager settings cannot move these numbers (see README, "Reading results honestly").
 #
 # Submit from the agent_orchestration directory:  sbatch weekly_vllm_3day.sh
 # Scale at submit time, e.g.:
@@ -39,7 +39,7 @@ conda activate agents
 
 # vLLM is pre-installed to a dedicated prefix so the job never pip-installs on
 # the clock, and never silently continues without a server (which would grade a
-# rule-based run and label it LLM — the failure mode CLAUDE.md warns about).
+# rule-based run and label it LLM — the silent-fallback failure mode).
 export PYTHONPATH=/project/dtyu/ms3235/vllm_pkgs:${PYTHONPATH:-}
 # REQUIRED: the agents env's optree extension needs GLIBCXX_3.4.31 but system
 # /lib64/libstdc++.so.6 stops at 3.4.29, so `import vllm` dies with an

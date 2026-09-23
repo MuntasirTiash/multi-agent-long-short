@@ -1,18 +1,16 @@
-# Phase 0 has ZERO third-party dependencies — it runs on the Python standard
-# library alone (python 3.9+). You can run `python run_demo.py` right now.
-#
-# The libraries below are NOT needed yet. They are listed so you know what
-# Phase 1 (real data) and Phase 2 (real local LLM) will pull in. All are
-# open-source and free — no commercial API. Install them only when you reach
-# that phase (on NJIT HPC: `module load Miniforge3 && conda activate agents`).
+# Core: the orchestration, features and evaluation are pure standard library
+# (Python 3.9+). `requests` is the one hard dependency — price download from
+# Yahoo's chart endpoint and the HTTP client for a local vLLM/Ollama server.
+requests>=2.31
 
-# ---- Phase 1: real point-in-time market data --------------------------------
-# pandas            # tables of prices/fundamentals; compute momentum & value
-# numpy             # numeric arrays; correlation matrix for the T4 topology
-# yfinance          # free historical price download (or use FAgent/data/)
+# ---- Optional: local, zero-cost LLM reasoning --------------------------------
+# LLM_BACKEND=openai-compatible  -> nothing extra here; run vLLM/Ollama separately
+#   vllm                          # GPU server for batched inference
+# LLM_BACKEND=transformers       -> in-process HuggingFace inference
+#   transformers>=4.44
+#   torch>=2.0
+# sentence-transformers           # optional real embeddings for agent memory
 
-# ---- Phase 2: local, zero-cost LLM reasoning --------------------------------
-# Reuse FAgent/utils/llm_utils.py (LLMClient). It needs ONE of:
-#   requests               # to talk to a local Ollama / vLLM server (HTTP)
-#   transformers + torch   # to run a HuggingFace model in-process on the GPU
-# sentence-transformers    # optional: real embeddings for agent memory
+# ---- Optional: analysis / plotting scripts -----------------------------------
+#   pandas                        # inspect_run.py, transcript analysis
+#   matplotlib                    # plot_feature_citations.py

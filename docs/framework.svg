@@ -1,0 +1,421 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1480 1270" width="1480" height="1270" role="img" aria-label="How the agent-orchestration framework works: price data becomes point-in-time features, 498 stock agents each form an independent opinion and then revise it after reading peers routed through a configurable communication graph, a manager agent turns the final opinions into a dollar-neutral long-short book, and evaluation grades it on out-of-sample forward returns that never enter a prompt.">
+<title>Agent Orchestration — framework overview</title>
+<defs>
+<marker id="aInk" viewBox="0 0 10 10" refX="9.2" refY="5" markerWidth="5.6" markerHeight="5.6" orient="auto-start-reverse"><path d="M0.5,0.8 L9.4,5 L0.5,9.2 z" fill="#52514e"/></marker>
+<marker id="aBlue" viewBox="0 0 10 10" refX="9.2" refY="5" markerWidth="5.6" markerHeight="5.6" orient="auto-start-reverse"><path d="M0.5,0.8 L9.4,5 L0.5,9.2 z" fill="#2a78d6"/></marker>
+<marker id="aOrange" viewBox="0 0 10 10" refX="9.2" refY="5" markerWidth="5.6" markerHeight="5.6" orient="auto-start-reverse"><path d="M0.5,0.8 L9.4,5 L0.5,9.2 z" fill="#eb6834"/></marker>
+<marker id="aMuted" viewBox="0 0 10 10" refX="9.2" refY="5" markerWidth="5.6" markerHeight="5.6" orient="auto-start-reverse"><path d="M0.5,0.8 L9.4,5 L0.5,9.2 z" fill="#898781"/></marker>
+</defs>
+<rect x="0.0" y="0.0" width="1480.0" height="1270.0" rx="0" fill="#fcfcfb"/>
+<g font-family="ui-sans-serif,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif">
+<text x="30.0" y="52.0" font-size="27" fill="#0b0b0b" font-weight="700">Agent Orchestration</text>
+<text x="30.0" y="80.0" font-size="13.2" fill="#52514e">One LLM agent per S&amp;P-500 firm forms an independent view, revises it after reading peers routed over a configurable graph, and a manager turns the result into a long/short book.</text>
+<text x="30.0" y="100.0" font-size="13.2" fill="#2a78d6" font-weight="600">Research question — does letting the agents talk produce a better book than the same agents working alone?</text>
+<rect x="905.0" y="43.0" width="11.0" height="11.0" rx="3" fill="#2a78d6"/>
+<text x="922.0" y="52.0" font-size="10.6" fill="#52514e">LLM brain (local Qwen2.5-7B)</text>
+<rect x="1116.0" y="43.0" width="11.0" height="11.0" rx="3" fill="#eb6834"/>
+<text x="1133.0" y="52.0" font-size="10.6" fill="#52514e">rule brain / fallback</text>
+<rect x="1285.0" y="43.0" width="11.0" height="11.0" rx="3" fill="#898781"/>
+<text x="1302.0" y="52.0" font-size="10.6" fill="#52514e">data &amp; plumbing</text>
+<line x1="30.0" y1="112.0" x2="1450.0" y2="112.0" stroke="#c3c2b7" stroke-width="1"/>
+<text x="30.0" y="144.0" font-size="11.2" fill="#898781" font-weight="700" letter-spacing="1.7">01 — THE PIPELINE, END TO END</text>
+<line x1="288.2" y1="140.0" x2="1450.0" y2="140.0" stroke="#e1e0d9" stroke-width="1"/>
+<rect x="30.0" y="176.0" width="190.0" height="95.1" rx="7" fill="#ffffff" stroke="#e1e0d9" stroke-width="1.0"/>
+<path d="M33.0,177.0 L33.0,270.1" stroke="#898781" stroke-width="3" stroke-linecap="round"/>
+<text x="41.0" y="199.0" font-size="12.6" fill="#0b0b0b" font-weight="600">Price data</text>
+<text x="41.0" y="219.0" font-size="10.2" fill="#52514e">data/price_cache/</text>
+<text x="41.0" y="232.7" font-size="10.2" fill="#52514e">498 tickers · OHLCV,</text>
+<text x="41.0" y="246.4" font-size="10.2" fill="#52514e">dividends, splits</text>
+<text x="41.0" y="260.1" font-size="10.2" fill="#52514e">437 bars per name</text>
+<rect x="276.0" y="176.0" width="190.0" height="95.1" rx="7" fill="#ffffff" stroke="#e1e0d9" stroke-width="1.0"/>
+<path d="M279.0,177.0 L279.0,270.1" stroke="#898781" stroke-width="3" stroke-linecap="round"/>
+<text x="287.0" y="199.0" font-size="12.6" fill="#0b0b0b" font-weight="600">Features</text>
+<text x="287.0" y="219.0" font-size="10.2" fill="#52514e">features.py</text>
+<text x="287.0" y="232.7" font-size="10.2" fill="#52514e">26 point-in-time signals</text>
+<text x="287.0" y="246.4" font-size="10.2" fill="#52514e">10 of them shown to the</text>
+<text x="287.0" y="260.1" font-size="10.2" fill="#52514e">agent, as percentiles</text>
+<rect x="522.0" y="176.0" width="190.0" height="95.1" rx="7" fill="#ffffff" stroke="#e1e0d9" stroke-width="1.0"/>
+<path d="M525.0,177.0 L525.0,270.1" stroke="#2a78d6" stroke-width="3" stroke-linecap="round"/>
+<text x="533.0" y="199.0" font-size="12.6" fill="#0b0b0b" font-weight="600">Tier 1 · StockAgents</text>
+<text x="533.0" y="219.0" font-size="10.2" fill="#52514e">498 agents, one per</text>
+<text x="533.0" y="232.7" font-size="10.2" fill="#52514e">ticker. Round 0 = an</text>
+<text x="533.0" y="246.4" font-size="10.2" fill="#52514e">independent opinion</text>
+<text x="533.0" y="260.1" font-size="10.2" fill="#52514e">with no peer input</text>
+<rect x="768.0" y="176.0" width="190.0" height="95.1" rx="7" fill="#ffffff" stroke="#e1e0d9" stroke-width="1.0"/>
+<path d="M771.0,177.0 L771.0,270.1" stroke="#2a78d6" stroke-width="3" stroke-linecap="round"/>
+<text x="779.0" y="199.0" font-size="12.6" fill="#0b0b0b" font-weight="600">Debate</text>
+<text x="779.0" y="219.0" font-size="10.2" fill="#52514e">MessageBus + topology</text>
+<text x="779.0" y="232.7" font-size="10.2" fill="#52514e">N_ROUNDS = 2 revisions</text>
+<text x="779.0" y="246.4" font-size="10.2" fill="#52514e">each agent re-scores</text>
+<text x="779.0" y="260.1" font-size="10.2" fill="#52514e">after reading its peers</text>
+<rect x="1014.0" y="176.0" width="190.0" height="95.1" rx="7" fill="#ffffff" stroke="#e1e0d9" stroke-width="1.0"/>
+<path d="M1017.0,177.0 L1017.0,270.1" stroke="#2a78d6" stroke-width="3" stroke-linecap="round"/>
+<text x="1025.0" y="199.0" font-size="12.6" fill="#0b0b0b" font-weight="600">Manager</text>
+<text x="1025.0" y="219.0" font-size="10.2" fill="#52514e">ManagerAgent</text>
+<text x="1025.0" y="232.7" font-size="10.2" fill="#52514e">reads all 498 opinions</text>
+<text x="1025.0" y="246.4" font-size="10.2" fill="#52514e">picks and sizes both</text>
+<text x="1025.0" y="260.1" font-size="10.2" fill="#52514e">sides of the book</text>
+<rect x="1260.0" y="176.0" width="190.0" height="95.1" rx="7" fill="#ffffff" stroke="#e1e0d9" stroke-width="1.0"/>
+<path d="M1263.0,177.0 L1263.0,270.1" stroke="#898781" stroke-width="3" stroke-linecap="round"/>
+<text x="1271.0" y="199.0" font-size="12.6" fill="#0b0b0b" font-weight="600">Evaluation</text>
+<text x="1271.0" y="219.0" font-size="10.2" fill="#52514e">evaluation.py</text>
+<text x="1271.0" y="232.7" font-size="10.2" fill="#52514e">rank IC vs forward ret.</text>
+<text x="1271.0" y="246.4" font-size="10.2" fill="#52514e">net of 20 bps round-trip</text>
+<text x="1271.0" y="260.1" font-size="10.2" fill="#52514e">Monte-Carlo null → p</text>
+<line x1="223.0" y1="223.5" x2="272.0" y2="223.5" stroke="#52514e" stroke-width="1.3" marker-end="url(#aInk)"/>
+<text x="248.0" y="215.5" font-size="9.8" fill="#898781" text-anchor="middle">prices</text>
+<line x1="469.0" y1="223.5" x2="518.0" y2="223.5" stroke="#52514e" stroke-width="1.3" marker-end="url(#aInk)"/>
+<text x="494.0" y="215.5" font-size="9.8" fill="#898781" text-anchor="middle">brief</text>
+<line x1="715.0" y1="223.5" x2="764.0" y2="223.5" stroke="#52514e" stroke-width="1.3" marker-end="url(#aInk)"/>
+<text x="740.0" y="215.5" font-size="9.8" fill="#898781" text-anchor="middle">opinions</text>
+<line x1="961.0" y1="223.5" x2="1010.0" y2="223.5" stroke="#52514e" stroke-width="1.3" marker-end="url(#aInk)"/>
+<text x="986.0" y="215.5" font-size="9.8" fill="#898781" text-anchor="middle">scores</text>
+<line x1="1207.0" y1="223.5" x2="1256.0" y2="223.5" stroke="#52514e" stroke-width="1.3" marker-end="url(#aInk)"/>
+<text x="1232.0" y="215.5" font-size="9.8" fill="#898781" text-anchor="middle">weights</text>
+<polyline points="125.0,271.1 125.0,317.1 1355.0,317.1 1355.0,275.1" fill="none" stroke="#898781" stroke-width="1.4" stroke-dasharray="6 4" marker-end="url(#aMuted)"/>
+<rect x="434.0" y="307.1" width="612.0" height="20.0" rx="4" fill="#fcfcfb"/>
+<text x="740.0" y="321.1" font-size="11" fill="#898781" text-anchor="middle">forward returns t → t+H  ·  reach evaluation.py directly and never appear in any prompt</text>
+<text x="30.0" y="400.0" font-size="11.2" fill="#898781" font-weight="700" letter-spacing="1.7">02 — INSIDE THE COMPONENTS</text>
+<line x1="262.9" y1="396.0" x2="1450.0" y2="396.0" stroke="#e1e0d9" stroke-width="1"/>
+<rect x="30.0" y="418.0" width="446.0" height="380.0" rx="12" fill="#f5f5f1" stroke="#e1e0d9" stroke-width="1"/>
+<rect x="517.0" y="418.0" width="446.0" height="380.0" rx="12" fill="#f5f5f1" stroke="#e1e0d9" stroke-width="1"/>
+<rect x="1004.0" y="418.0" width="446.0" height="380.0" rx="12" fill="#f5f5f1" stroke="#e1e0d9" stroke-width="1"/>
+<text x="50.0" y="446.0" font-size="14.6" fill="#0b0b0b" font-weight="700">Inside one StockAgent</text>
+<text x="50.0" y="464.0" font-size="10.4" fill="#898781">the dual-brain pattern — an LLM path with a rule twin behind it</text>
+<text x="537.0" y="446.0" font-size="14.6" fill="#0b0b0b" font-weight="700">One revision round</text>
+<text x="537.0" y="464.0" font-size="10.4" fill="#898781">who reads whom, and when the shared world is allowed to move</text>
+<text x="1024.0" y="446.0" font-size="14.6" fill="#0b0b0b" font-weight="700">The ManagerAgent</text>
+<text x="1024.0" y="464.0" font-size="10.4" fill="#898781">all 498 final opinions → one dollar-neutral book</text>
+<rect x="50.0" y="478.0" width="406.0" height="47.9" rx="7" fill="#ffffff" stroke="#e1e0d9" stroke-width="1.0"/>
+<text x="60.0" y="497.9" font-size="10.4" fill="#52514e">one stock's brief — 10 features as cross-sectional percentiles</text>
+<text x="60.0" y="511.8" font-size="10.4" fill="#52514e">+ inbox: the peer messages this topology lets it read</text>
+<line x1="168.0" y1="525.9" x2="168.0" y2="543.9" stroke="#52514e" stroke-width="1.2" marker-end="url(#aInk)"/>
+<line x1="378.0" y1="525.9" x2="378.0" y2="543.9" stroke="#eb6834" stroke-width="1.2" marker-end="url(#aOrange)"/>
+<rect x="50.0" y="543.9" width="236.0" height="74.6" rx="7" fill="#eaf2fc" stroke="#2a78d6" stroke-width="1.1"/>
+<text x="59.0" y="563.7" font-size="11.4" fill="#2a78d6" font-weight="600">prompt → Qwen2.5-7B</text>
+<text x="59.0" y="583.0" font-size="9.9" fill="#52514e">local &amp; open-weight; returns</text>
+<text x="59.0" y="596.2" font-size="9.9" fill="#52514e">JSON: score, direction,</text>
+<text x="59.0" y="609.5" font-size="9.9" fill="#52514e">confidence, thesis</text>
+<rect x="300.0" y="543.9" width="156.0" height="74.6" rx="7" fill="#fdeee7" stroke="#eb6834" stroke-width="1.1"/>
+<text x="309.0" y="563.7" font-size="11.4" fill="#eb6834" font-weight="600">rule twin</text>
+<text x="309.0" y="583.0" font-size="9.9" fill="#52514e">0.6 · momentum</text>
+<text x="309.0" y="596.2" font-size="9.9" fill="#52514e">+ 0.4 · reversal</text>
+<text x="309.0" y="609.5" font-size="9.9" fill="#52514e">— always computed</text>
+<line x1="168.0" y1="618.5" x2="168.0" y2="630.5" stroke="#2a78d6" stroke-width="1.2" marker-end="url(#aBlue)"/>
+<rect x="68.0" y="630.5" width="200.0" height="45.2" rx="7" fill="#ffffff" stroke="#2a78d6" stroke-width="1.2" stroke-dasharray="4 3"/>
+<text x="76.0" y="648.8" font-size="10.8" fill="#2a78d6" font-weight="600">message_from_data()</text>
+<text x="76.0" y="667.7" font-size="9.8" fill="#52514e">is `score` a real number?</text>
+<line x1="168.0" y1="675.7" x2="168.0" y2="705.7" stroke="#2a78d6" stroke-width="1.3" marker-end="url(#aBlue)"/>
+<text x="176.0" y="694.7" font-size="9.6" fill="#2a78d6" font-weight="600">yes — keep the model's answer</text>
+<line x1="378.0" y1="618.5" x2="378.0" y2="705.7" stroke="#eb6834" stroke-width="1.3" marker-end="url(#aOrange)"/>
+<line x1="272.0" y1="661.7" x2="372.0" y2="661.7" stroke="#eb6834" stroke-width="1.2" marker-end="url(#aOrange)"/>
+<text x="325.0" y="656.7" font-size="9.6" fill="#eb6834" text-anchor="middle" font-weight="600">no</text>
+<rect x="50.0" y="705.7" width="406.0" height="49.7" rx="7" fill="#ffffff" stroke="#c3c2b7" stroke-width="1.2"/>
+<text x="60.0" y="726.5" font-size="11.4" fill="#0b0b0b" font-weight="600">StockMessage — the one wire format</text>
+<text x="60.0" y="745.3" font-size="9.6" fill="#52514e">ticker · score 0–100 · direction · confidence · thesis ≤ 50 words · round</text>
+<text x="50.0" y="773.3" font-size="10.2" fill="#52514e">The rule twin is built before the model is ever called, at every call site.</text>
+<text x="50.0" y="787.3" font-size="10.2" fill="#52514e">Measured on the 32-day run: 76 fallbacks in 111,552 calls (0.07%).</text>
+<text x="600.0" y="484.0" font-size="9.8" fill="#898781" text-anchor="middle">bus.latest · round r−1</text>
+<text x="886.0" y="484.0" font-size="9.8" fill="#898781" text-anchor="middle">bus.latest · round r</text>
+<rect x="537.0" y="494.0" width="126.0" height="28.0" rx="6" fill="#ffffff" stroke="#e1e0d9" stroke-width="1.0"/>
+<text x="548.0" y="511.6" font-size="10.6" fill="#0b0b0b" font-weight="600" font-family="ui-monospace,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace">AAPL</text>
+<text x="652.0" y="511.6" font-size="10.6" fill="#52514e" text-anchor="end" font-family="ui-monospace,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace">72</text>
+<rect x="826.0" y="494.0" width="117.0" height="28.0" rx="6" fill="#ffffff" stroke="#e1e0d9" stroke-width="1.0"/>
+<text x="837.0" y="511.6" font-size="10.6" fill="#0b0b0b" font-weight="600" font-family="ui-monospace,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace">AAPL</text>
+<text x="932.0" y="511.6" font-size="10.6" fill="#2a78d6" text-anchor="end" font-weight="600" font-family="ui-monospace,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace">68</text>
+<line x1="666.0" y1="508.0" x2="683.0" y2="508.0" stroke="#52514e" stroke-width="1.1" marker-end="url(#aInk)"/>
+<line x1="806.0" y1="508.0" x2="823.0" y2="508.0" stroke="#2a78d6" stroke-width="1.1" marker-end="url(#aBlue)"/>
+<rect x="537.0" y="528.0" width="126.0" height="28.0" rx="6" fill="#ffffff" stroke="#e1e0d9" stroke-width="1.0"/>
+<text x="548.0" y="545.6" font-size="10.6" fill="#0b0b0b" font-weight="600" font-family="ui-monospace,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace">MSFT</text>
+<text x="652.0" y="545.6" font-size="10.6" fill="#52514e" text-anchor="end" font-family="ui-monospace,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace">55</text>
+<rect x="826.0" y="528.0" width="117.0" height="28.0" rx="6" fill="#ffffff" stroke="#e1e0d9" stroke-width="1.0"/>
+<text x="837.0" y="545.6" font-size="10.6" fill="#0b0b0b" font-weight="600" font-family="ui-monospace,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace">MSFT</text>
+<text x="932.0" y="545.6" font-size="10.6" fill="#2a78d6" text-anchor="end" font-weight="600" font-family="ui-monospace,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace">59</text>
+<line x1="666.0" y1="542.0" x2="683.0" y2="542.0" stroke="#52514e" stroke-width="1.1" marker-end="url(#aInk)"/>
+<line x1="806.0" y1="542.0" x2="823.0" y2="542.0" stroke="#2a78d6" stroke-width="1.1" marker-end="url(#aBlue)"/>
+<rect x="537.0" y="562.0" width="126.0" height="28.0" rx="6" fill="#ffffff" stroke="#e1e0d9" stroke-width="1.0"/>
+<text x="548.0" y="579.6" font-size="10.6" fill="#0b0b0b" font-weight="600" font-family="ui-monospace,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace">XOM</text>
+<text x="652.0" y="579.6" font-size="10.6" fill="#52514e" text-anchor="end" font-family="ui-monospace,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace">38</text>
+<rect x="826.0" y="562.0" width="117.0" height="28.0" rx="6" fill="#ffffff" stroke="#e1e0d9" stroke-width="1.0"/>
+<text x="837.0" y="579.6" font-size="10.6" fill="#0b0b0b" font-weight="600" font-family="ui-monospace,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace">XOM</text>
+<text x="932.0" y="579.6" font-size="10.6" fill="#2a78d6" text-anchor="end" font-weight="600" font-family="ui-monospace,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace">44</text>
+<line x1="666.0" y1="576.0" x2="683.0" y2="576.0" stroke="#52514e" stroke-width="1.1" marker-end="url(#aInk)"/>
+<line x1="806.0" y1="576.0" x2="823.0" y2="576.0" stroke="#2a78d6" stroke-width="1.1" marker-end="url(#aBlue)"/>
+<rect x="537.0" y="596.0" width="126.0" height="28.0" rx="6" fill="#ffffff" stroke="#e1e0d9" stroke-width="1.0"/>
+<text x="548.0" y="613.6" font-size="10.6" fill="#0b0b0b" font-weight="600" font-family="ui-monospace,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace">JPM</text>
+<text x="652.0" y="613.6" font-size="10.6" fill="#52514e" text-anchor="end" font-family="ui-monospace,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace">61</text>
+<rect x="826.0" y="596.0" width="117.0" height="28.0" rx="6" fill="#ffffff" stroke="#e1e0d9" stroke-width="1.0"/>
+<text x="837.0" y="613.6" font-size="10.6" fill="#0b0b0b" font-weight="600" font-family="ui-monospace,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace">JPM</text>
+<text x="932.0" y="613.6" font-size="10.6" fill="#2a78d6" text-anchor="end" font-weight="600" font-family="ui-monospace,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace">57</text>
+<line x1="666.0" y1="610.0" x2="683.0" y2="610.0" stroke="#52514e" stroke-width="1.1" marker-end="url(#aInk)"/>
+<line x1="806.0" y1="610.0" x2="823.0" y2="610.0" stroke="#2a78d6" stroke-width="1.1" marker-end="url(#aBlue)"/>
+<rect x="686.0" y="494.0" width="120.0" height="130.0" rx="7" fill="#eaf2fc" stroke="#2a78d6" stroke-width="1.1"/>
+<text x="746.0" y="546.0" font-size="11.8" fill="#2a78d6" text-anchor="middle" font-weight="700">revise()</text>
+<text x="746.0" y="564.0" font-size="9.6" fill="#52514e" text-anchor="middle">reads inbox_for(t)</text>
+<text x="746.0" y="576.5" font-size="9.6" fill="#52514e" text-anchor="middle">= only the peers</text>
+<text x="746.0" y="589.0" font-size="9.6" fill="#52514e" text-anchor="middle">the topology allows</text>
+<line x1="816.0" y1="486.0" x2="816.0" y2="632.0" stroke="#eb6834" stroke-width="1.4" stroke-dasharray="5 4"/>
+<text x="816.0" y="646.0" font-size="9.6" fill="#eb6834" text-anchor="middle" font-weight="600">post barrier</text>
+<rect x="537.0" y="658.0" width="406.0" height="72.7" rx="7" fill="#ffffff" stroke="#2a78d6" stroke-width="1.1"/>
+<text x="546.0" y="676.7" font-size="10.2" fill="#52514e">All 498 revisions are computed off the SAME snapshot, then</text>
+<text x="546.0" y="690.4" font-size="10.2" fill="#52514e">posted together. Posting as you go would let the last agent in</text>
+<text x="546.0" y="704.0" font-size="10.2" fill="#52514e">dict order react to a world the first one never saw.</text>
+<text x="546.0" y="717.7" font-size="10.2" fill="#52514e">N_ROUNDS = 2 revision rounds run per rebalance date.</text>
+<text x="537.0" y="750.7" font-size="10.2" fill="#52514e">BatchScheduler fires a whole round's prompts at once — inside a round</text>
+<text x="537.0" y="764.7" font-size="10.2" fill="#52514e">the agents are independent, so batching changes no result.</text>
+<rect x="1024.0" y="478.0" width="406.0" height="74.1" rx="7" fill="#ffffff" stroke="#e1e0d9" stroke-width="1.0"/>
+<text x="1033.0" y="497.4" font-size="11" fill="#0b0b0b" font-weight="600">candidates() — a shortlist, not the table</text>
+<text x="1033.0" y="516.6" font-size="9.9" fill="#52514e">Rank all 498 by score, then show the manager only the</text>
+<text x="1033.0" y="529.8" font-size="9.9" fill="#52514e">top 30 and bottom 30 — the full table runs ≈12k tokens</text>
+<text x="1033.0" y="543.1" font-size="9.9" fill="#52514e">against a 4,096 context, so every call would fail.</text>
+<line x1="1141.0" y1="552.1" x2="1141.0" y2="564.1" stroke="#2a78d6" stroke-width="1.2" marker-end="url(#aBlue)"/>
+<rect x="1024.0" y="564.1" width="234.0" height="48.1" rx="7" fill="#eaf2fc" stroke="#2a78d6" stroke-width="1.1"/>
+<text x="1033.0" y="583.9" font-size="11.4" fill="#2a78d6" font-weight="600">LLM manager → JSON</text>
+<text x="1033.0" y="603.2" font-size="9.9" fill="#52514e">longs, shorts, weights, rationale</text>
+<line x1="1141.0" y1="612.2" x2="1141.0" y2="624.2" stroke="#2a78d6" stroke-width="1.2" marker-end="url(#aBlue)"/>
+<rect x="1032.0" y="624.2" width="218.0" height="70.6" rx="7" fill="#ffffff" stroke="#2a78d6" stroke-width="1.2" stroke-dasharray="4 3"/>
+<text x="1040.0" y="642.4" font-size="10.8" fill="#2a78d6" font-weight="600">reject the book if…</text>
+<text x="1040.0" y="661.1" font-size="9.6" fill="#52514e">· a pick is off the shortlist</text>
+<text x="1040.0" y="674.0" font-size="9.6" fill="#52514e">· one side is empty — that is a</text>
+<text x="1040.0" y="686.8" font-size="9.6" fill="#52514e">   directional bet, not this book</text>
+<rect x="1276.0" y="564.1" width="154.0" height="74.6" rx="7" fill="#fdeee7" stroke="#eb6834" stroke-width="1.1"/>
+<text x="1285.0" y="583.9" font-size="11.4" fill="#eb6834" font-weight="600">rule brain</text>
+<text x="1285.0" y="603.2" font-size="9.9" fill="#52514e">conviction =</text>
+<text x="1285.0" y="616.4" font-size="9.9" fill="#52514e">confidence ×</text>
+<text x="1285.0" y="629.7" font-size="9.9" fill="#52514e">|score − 50|</text>
+<line x1="1353.0" y1="552.1" x2="1353.0" y2="564.1" stroke="#eb6834" stroke-width="1.2" marker-end="url(#aOrange)"/>
+<line x1="1254.0" y1="672.8" x2="1345.0" y2="672.8" stroke="#eb6834" stroke-width="1.2" marker-end="url(#aOrange)"/>
+<text x="1303.5" y="667.8" font-size="9.6" fill="#eb6834" text-anchor="middle" font-weight="600">reject</text>
+<line x1="1141.0" y1="694.8" x2="1141.0" y2="708.8" stroke="#2a78d6" stroke-width="1.3" marker-end="url(#aBlue)"/>
+<line x1="1353.0" y1="638.7" x2="1353.0" y2="708.8" stroke="#eb6834" stroke-width="1.3" marker-end="url(#aOrange)"/>
+<rect x="1024.0" y="708.8" width="406.0" height="49.7" rx="7" fill="#ffffff" stroke="#c3c2b7" stroke-width="1.2"/>
+<text x="1034.0" y="729.6" font-size="11.4" fill="#0b0b0b" font-weight="600">dollar-neutral book</text>
+<text x="1034.0" y="748.5" font-size="9.6" fill="#52514e">long weights sum to +1 · short weights to −1 · gross 2 · net 0</text>
+<text x="1024.0" y="776.5" font-size="10.2" fill="#52514e">BOOK_SIZING = "flexible": the manager chooses its own count per side,</text>
+<text x="1024.0" y="790.5" font-size="10.2" fill="#52514e">inside [5, 50], instead of a hard-wired top-5 / bottom-5.</text>
+<text x="30.0" y="838.0" font-size="11.2" fill="#898781" font-weight="700" letter-spacing="1.7">03 — THE EXPERIMENTAL VARIABLE: WHO HEARS WHOM</text>
+<line x1="431.3" y1="834.0" x2="1450.0" y2="834.0" stroke="#e1e0d9" stroke-width="1"/>
+<rect x="30.0" y="856.0" width="220.0" height="200.0" rx="10" fill="#f5f5f1" stroke="#e1e0d9" stroke-width="1"/>
+<text x="140.0" y="878.0" font-size="13" fill="#0b0b0b" text-anchor="middle" font-weight="700" font-family="ui-monospace,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace">full</text>
+<g transform="translate(140.0,932.0)">
+<line x1="0.0" y1="-44.0" x2="25.9" y2="-35.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.22"/>
+<line x1="0.0" y1="-44.0" x2="41.8" y2="-13.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.22"/>
+<line x1="0.0" y1="-44.0" x2="41.8" y2="13.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.22"/>
+<line x1="0.0" y1="-44.0" x2="25.9" y2="35.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.22"/>
+<line x1="0.0" y1="-44.0" x2="0.0" y2="44.0" stroke="#2a78d6" stroke-width="1.15" opacity="0.22"/>
+<line x1="0.0" y1="-44.0" x2="-25.9" y2="35.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.22"/>
+<line x1="0.0" y1="-44.0" x2="-41.8" y2="13.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.22"/>
+<line x1="0.0" y1="-44.0" x2="-41.8" y2="-13.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.22"/>
+<line x1="0.0" y1="-44.0" x2="-25.9" y2="-35.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.22"/>
+<line x1="25.9" y1="-35.6" x2="41.8" y2="-13.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.22"/>
+<line x1="25.9" y1="-35.6" x2="41.8" y2="13.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.22"/>
+<line x1="25.9" y1="-35.6" x2="25.9" y2="35.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.22"/>
+<line x1="25.9" y1="-35.6" x2="0.0" y2="44.0" stroke="#2a78d6" stroke-width="1.15" opacity="0.22"/>
+<line x1="25.9" y1="-35.6" x2="-25.9" y2="35.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.22"/>
+<line x1="25.9" y1="-35.6" x2="-41.8" y2="13.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.22"/>
+<line x1="25.9" y1="-35.6" x2="-41.8" y2="-13.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.22"/>
+<line x1="25.9" y1="-35.6" x2="-25.9" y2="-35.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.22"/>
+<line x1="41.8" y1="-13.6" x2="41.8" y2="13.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.22"/>
+<line x1="41.8" y1="-13.6" x2="25.9" y2="35.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.22"/>
+<line x1="41.8" y1="-13.6" x2="0.0" y2="44.0" stroke="#2a78d6" stroke-width="1.15" opacity="0.22"/>
+<line x1="41.8" y1="-13.6" x2="-25.9" y2="35.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.22"/>
+<line x1="41.8" y1="-13.6" x2="-41.8" y2="13.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.22"/>
+<line x1="41.8" y1="-13.6" x2="-41.8" y2="-13.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.22"/>
+<line x1="41.8" y1="-13.6" x2="-25.9" y2="-35.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.22"/>
+<line x1="41.8" y1="13.6" x2="25.9" y2="35.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.22"/>
+<line x1="41.8" y1="13.6" x2="0.0" y2="44.0" stroke="#2a78d6" stroke-width="1.15" opacity="0.22"/>
+<line x1="41.8" y1="13.6" x2="-25.9" y2="35.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.22"/>
+<line x1="41.8" y1="13.6" x2="-41.8" y2="13.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.22"/>
+<line x1="41.8" y1="13.6" x2="-41.8" y2="-13.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.22"/>
+<line x1="41.8" y1="13.6" x2="-25.9" y2="-35.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.22"/>
+<line x1="25.9" y1="35.6" x2="0.0" y2="44.0" stroke="#2a78d6" stroke-width="1.15" opacity="0.22"/>
+<line x1="25.9" y1="35.6" x2="-25.9" y2="35.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.22"/>
+<line x1="25.9" y1="35.6" x2="-41.8" y2="13.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.22"/>
+<line x1="25.9" y1="35.6" x2="-41.8" y2="-13.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.22"/>
+<line x1="25.9" y1="35.6" x2="-25.9" y2="-35.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.22"/>
+<line x1="0.0" y1="44.0" x2="-25.9" y2="35.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.22"/>
+<line x1="0.0" y1="44.0" x2="-41.8" y2="13.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.22"/>
+<line x1="0.0" y1="44.0" x2="-41.8" y2="-13.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.22"/>
+<line x1="0.0" y1="44.0" x2="-25.9" y2="-35.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.22"/>
+<line x1="-25.9" y1="35.6" x2="-41.8" y2="13.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.22"/>
+<line x1="-25.9" y1="35.6" x2="-41.8" y2="-13.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.22"/>
+<line x1="-25.9" y1="35.6" x2="-25.9" y2="-35.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.22"/>
+<line x1="-41.8" y1="13.6" x2="-41.8" y2="-13.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.22"/>
+<line x1="-41.8" y1="13.6" x2="-25.9" y2="-35.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.22"/>
+<line x1="-41.8" y1="-13.6" x2="-25.9" y2="-35.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.22"/>
+<circle cx="0.0" cy="-44.0" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+<circle cx="25.9" cy="-35.6" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+<circle cx="41.8" cy="-13.6" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+<circle cx="41.8" cy="13.6" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+<circle cx="25.9" cy="35.6" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+<circle cx="0.0" cy="44.0" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+<circle cx="-25.9" cy="35.6" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+<circle cx="-41.8" cy="13.6" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+<circle cx="-41.8" cy="-13.6" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+<circle cx="-25.9" cy="-35.6" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+</g>
+<text x="140.0" y="998.0" font-size="9.7" fill="#52514e" text-anchor="middle">one clique — every agent</text>
+<text x="140.0" y="1011.0" font-size="9.7" fill="#52514e" text-anchor="middle">reads all 497 others</text>
+<text x="140.0" y="1036.0" font-size="10.4" fill="#2a78d6" text-anchor="middle" font-weight="700">degree 497</text>
+<rect x="270.0" y="856.0" width="220.0" height="200.0" rx="10" fill="#f5f5f1" stroke="#e1e0d9" stroke-width="1"/>
+<text x="380.0" y="878.0" font-size="13" fill="#0b0b0b" text-anchor="middle" font-weight="700" font-family="ui-monospace,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace">sector</text>
+<g transform="translate(380.0,932.0)">
+<line x1="0.0" y1="-44.0" x2="25.9" y2="-35.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.62"/>
+<line x1="0.0" y1="-44.0" x2="41.8" y2="-13.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.62"/>
+<line x1="25.9" y1="-35.6" x2="41.8" y2="-13.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.62"/>
+<line x1="41.8" y1="13.6" x2="25.9" y2="35.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.62"/>
+<line x1="41.8" y1="13.6" x2="0.0" y2="44.0" stroke="#2a78d6" stroke-width="1.15" opacity="0.62"/>
+<line x1="41.8" y1="13.6" x2="-25.9" y2="35.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.62"/>
+<line x1="25.9" y1="35.6" x2="0.0" y2="44.0" stroke="#2a78d6" stroke-width="1.15" opacity="0.62"/>
+<line x1="25.9" y1="35.6" x2="-25.9" y2="35.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.62"/>
+<line x1="0.0" y1="44.0" x2="-25.9" y2="35.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.62"/>
+<line x1="-41.8" y1="13.6" x2="-41.8" y2="-13.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.62"/>
+<line x1="-41.8" y1="13.6" x2="-25.9" y2="-35.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.62"/>
+<line x1="-41.8" y1="-13.6" x2="-25.9" y2="-35.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.62"/>
+<circle cx="0.0" cy="-44.0" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+<circle cx="25.9" cy="-35.6" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+<circle cx="41.8" cy="-13.6" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+<circle cx="41.8" cy="13.6" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+<circle cx="25.9" cy="35.6" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+<circle cx="0.0" cy="44.0" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+<circle cx="-25.9" cy="35.6" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+<circle cx="-41.8" cy="13.6" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+<circle cx="-41.8" cy="-13.6" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+<circle cx="-25.9" cy="-35.6" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+</g>
+<text x="380.0" y="998.0" font-size="9.7" fill="#52514e" text-anchor="middle">cliques of one GICS sector;</text>
+<text x="380.0" y="1011.0" font-size="9.7" fill="#52514e" text-anchor="middle">11 groups over 498 names</text>
+<text x="380.0" y="1036.0" font-size="10.4" fill="#2a78d6" text-anchor="middle" font-weight="700">degree ≈ 54</text>
+<rect x="510.0" y="856.0" width="220.0" height="200.0" rx="10" fill="#f5f5f1" stroke="#e1e0d9" stroke-width="1"/>
+<text x="620.0" y="878.0" font-size="13" fill="#0b0b0b" text-anchor="middle" font-weight="700" font-family="ui-monospace,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace">sparse (pct)</text>
+<g transform="translate(620.0,932.0)">
+<line x1="0.0" y1="-44.0" x2="25.9" y2="35.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.62"/>
+<line x1="0.0" y1="-44.0" x2="-41.8" y2="13.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.62"/>
+<line x1="25.9" y1="-35.6" x2="-41.8" y2="13.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.62"/>
+<line x1="25.9" y1="-35.6" x2="41.8" y2="13.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.62"/>
+<line x1="41.8" y1="-13.6" x2="0.0" y2="44.0" stroke="#2a78d6" stroke-width="1.15" opacity="0.62"/>
+<line x1="41.8" y1="-13.6" x2="-25.9" y2="-35.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.62"/>
+<line x1="41.8" y1="13.6" x2="-25.9" y2="-35.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.62"/>
+<line x1="25.9" y1="35.6" x2="-25.9" y2="35.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.62"/>
+<line x1="0.0" y1="44.0" x2="-41.8" y2="-13.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.62"/>
+<line x1="-25.9" y1="35.6" x2="-41.8" y2="-13.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.62"/>
+<circle cx="0.0" cy="-44.0" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+<circle cx="25.9" cy="-35.6" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+<circle cx="41.8" cy="-13.6" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+<circle cx="41.8" cy="13.6" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+<circle cx="25.9" cy="35.6" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+<circle cx="0.0" cy="44.0" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+<circle cx="-25.9" cy="35.6" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+<circle cx="-41.8" cy="13.6" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+<circle cx="-41.8" cy="-13.6" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+<circle cx="-25.9" cy="-35.6" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+</g>
+<text x="620.0" y="998.0" font-size="9.7" fill="#52514e" text-anchor="middle">a fixed SHARE of the</text>
+<text x="620.0" y="1011.0" font-size="9.7" fill="#52514e" text-anchor="middle">cross-section, not a count</text>
+<text x="620.0" y="1036.0" font-size="10.4" fill="#2a78d6" text-anchor="middle" font-weight="700">degree = 10% ≈ 50</text>
+<rect x="750.0" y="856.0" width="220.0" height="200.0" rx="10" fill="#f5f5f1" stroke="#e1e0d9" stroke-width="1"/>
+<text x="860.0" y="878.0" font-size="13" fill="#0b0b0b" text-anchor="middle" font-weight="700" font-family="ui-monospace,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace">corr_topk</text>
+<g transform="translate(860.0,932.0)">
+<line x1="0.0" y1="-44.0" x2="41.8" y2="13.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.62"/>
+<line x1="41.8" y1="13.6" x2="-25.9" y2="35.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.62"/>
+<line x1="-25.9" y1="35.6" x2="0.0" y2="-44.0" stroke="#2a78d6" stroke-width="1.15" opacity="0.62"/>
+<line x1="25.9" y1="-35.6" x2="25.9" y2="35.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.62"/>
+<line x1="25.9" y1="35.6" x2="-41.8" y2="13.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.62"/>
+<line x1="-41.8" y1="13.6" x2="25.9" y2="-35.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.62"/>
+<line x1="41.8" y1="-13.6" x2="0.0" y2="44.0" stroke="#2a78d6" stroke-width="1.15" opacity="0.62"/>
+<line x1="0.0" y1="44.0" x2="-41.8" y2="-13.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.62"/>
+<line x1="-41.8" y1="-13.6" x2="41.8" y2="-13.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.62"/>
+<line x1="-25.9" y1="-35.6" x2="0.0" y2="-44.0" stroke="#2a78d6" stroke-width="1.15" opacity="0.62"/>
+<line x1="-25.9" y1="-35.6" x2="0.0" y2="44.0" stroke="#2a78d6" stroke-width="1.15" opacity="0.62"/>
+<circle cx="0.0" cy="-44.0" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+<circle cx="25.9" cy="-35.6" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+<circle cx="41.8" cy="-13.6" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+<circle cx="41.8" cy="13.6" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+<circle cx="25.9" cy="35.6" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+<circle cx="0.0" cy="44.0" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+<circle cx="-25.9" cy="35.6" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+<circle cx="-41.8" cy="13.6" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+<circle cx="-41.8" cy="-13.6" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+<circle cx="-25.9" cy="-35.6" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+</g>
+<text x="860.0" y="998.0" font-size="9.7" fill="#52514e" text-anchor="middle">the k most-correlated peers;</text>
+<text x="860.0" y="1011.0" font-size="9.7" fill="#52514e" text-anchor="middle">clusters cut across sectors</text>
+<text x="860.0" y="1036.0" font-size="10.4" fill="#2a78d6" text-anchor="middle" font-weight="700">degree = k = 10</text>
+<rect x="990.0" y="856.0" width="220.0" height="200.0" rx="10" fill="#f5f5f1" stroke="#e1e0d9" stroke-width="1"/>
+<text x="1100.0" y="878.0" font-size="13" fill="#0b0b0b" text-anchor="middle" font-weight="700" font-family="ui-monospace,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace">corr_threshold</text>
+<g transform="translate(1100.0,932.0)">
+<line x1="0.0" y1="-44.0" x2="25.9" y2="-35.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.62"/>
+<line x1="0.0" y1="-44.0" x2="41.8" y2="-13.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.62"/>
+<line x1="0.0" y1="-44.0" x2="-41.8" y2="-13.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.62"/>
+<line x1="0.0" y1="-44.0" x2="-25.9" y2="-35.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.62"/>
+<line x1="25.9" y1="-35.6" x2="41.8" y2="-13.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.62"/>
+<line x1="25.9" y1="-35.6" x2="-41.8" y2="-13.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.62"/>
+<line x1="25.9" y1="-35.6" x2="-25.9" y2="-35.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.62"/>
+<line x1="41.8" y1="-13.6" x2="-41.8" y2="-13.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.62"/>
+<line x1="41.8" y1="-13.6" x2="-25.9" y2="-35.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.62"/>
+<line x1="-41.8" y1="-13.6" x2="-25.9" y2="-35.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.62"/>
+<line x1="41.8" y1="13.6" x2="25.9" y2="35.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.62"/>
+<line x1="25.9" y1="35.6" x2="0.0" y2="44.0" stroke="#2a78d6" stroke-width="1.15" opacity="0.62"/>
+<circle cx="0.0" cy="-44.0" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+<circle cx="25.9" cy="-35.6" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+<circle cx="41.8" cy="-13.6" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+<circle cx="41.8" cy="13.6" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+<circle cx="25.9" cy="35.6" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+<circle cx="0.0" cy="44.0" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+<circle cx="-25.9" cy="35.6" r="4.4" fill="#fcfcfb" stroke="#898781" stroke-width="1.5" stroke-dasharray="2 1.6"/>
+<circle cx="-41.8" cy="13.6" r="4.4" fill="#fcfcfb" stroke="#898781" stroke-width="1.5" stroke-dasharray="2 1.6"/>
+<circle cx="-41.8" cy="-13.6" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+<circle cx="-25.9" cy="-35.6" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+</g>
+<text x="1100.0" y="998.0" font-size="9.7" fill="#52514e" text-anchor="middle">everyone with ρ &gt; τ — degree</text>
+<text x="1100.0" y="1011.0" font-size="9.7" fill="#52514e" text-anchor="middle">floats, some agents isolate</text>
+<text x="1100.0" y="1036.0" font-size="10.4" fill="#2a78d6" text-anchor="middle" font-weight="700">degree 23–46 at τ = 0.5</text>
+<rect x="1230.0" y="856.0" width="220.0" height="200.0" rx="10" fill="#f5f5f1" stroke="#e1e0d9" stroke-width="1"/>
+<text x="1340.0" y="878.0" font-size="13" fill="#0b0b0b" text-anchor="middle" font-weight="700" font-family="ui-monospace,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace">corr_anti</text>
+<g transform="translate(1340.0,932.0)">
+<line x1="0.0" y1="-44.0" x2="0.0" y2="44.0" stroke="#2a78d6" stroke-width="1.15" opacity="0.62"/>
+<line x1="25.9" y1="-35.6" x2="-25.9" y2="35.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.62"/>
+<line x1="41.8" y1="-13.6" x2="-41.8" y2="13.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.62"/>
+<line x1="41.8" y1="13.6" x2="-41.8" y2="-13.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.62"/>
+<line x1="25.9" y1="35.6" x2="-25.9" y2="-35.6" stroke="#2a78d6" stroke-width="1.15" opacity="0.62"/>
+<circle cx="0.0" cy="-44.0" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+<circle cx="25.9" cy="-35.6" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+<circle cx="41.8" cy="-13.6" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+<circle cx="41.8" cy="13.6" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+<circle cx="25.9" cy="35.6" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+<circle cx="0.0" cy="44.0" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+<circle cx="-25.9" cy="35.6" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+<circle cx="-41.8" cy="13.6" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+<circle cx="-41.8" cy="-13.6" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+<circle cx="-25.9" cy="-35.6" r="4.6" fill="#52514e" stroke="#fcfcfb" stroke-width="1.4"/>
+</g>
+<text x="1340.0" y="998.0" font-size="9.7" fill="#52514e" text-anchor="middle">the LEAST-correlated peers,</text>
+<text x="1340.0" y="1011.0" font-size="9.7" fill="#52514e" text-anchor="middle">a deliberate contrarian feed</text>
+<text x="1340.0" y="1036.0" font-size="10.4" fill="#2a78d6" text-anchor="middle" font-weight="700">degree = k = 10</text>
+<text x="30.0" y="1080.0" font-size="10.8" fill="#52514e">Same ten agents, same ring, in every panel — only the edges change. Each agent still scores only its own stock; the graph decides whose score it may read before revising.</text>
+<text x="30.0" y="1096.0" font-size="10.8" fill="#52514e">Degree and structure are confounded today (full = 497 peers, sector ≈ 54, sparse ≈ 50, corr_topk = 10), so any structural claim needs the two controls in TOPOLOGY_PLAN.md §3: a degree-matched random graph, and a peer-shuffling placebo.</text>
+<text x="30.0" y="1112.0" font-size="10.8" fill="#898781">A second tier exists in hierarchy.py — one industry leader per sector aggregates its members and the leaders then form their own council — but it has not been run against a model yet, so it is left off this picture.</text>
+<text x="30.0" y="1138.0" font-size="11.2" fill="#898781" font-weight="700" letter-spacing="1.7">04 — INVARIANTS THE HARNESS ENFORCES</text>
+<line x1="347.1" y1="1134.0" x2="1450.0" y2="1134.0" stroke="#e1e0d9" stroke-width="1"/>
+<rect x="30.0" y="1152.0" width="446.0" height="93.8" rx="7" fill="#ffffff" stroke="#e1e0d9" stroke-width="1.0"/>
+<path d="M33.0,1153.0 L33.0,1244.8" stroke="#898781" stroke-width="3" stroke-linecap="round"/>
+<text x="41.0" y="1174.0" font-size="11.6" fill="#0b0b0b" font-weight="600">Leakage safety</text>
+<text x="41.0" y="1193.7" font-size="10.2" fill="#52514e">Features at date t read prices ≤ t only.</text>
+<text x="41.0" y="1207.4" font-size="10.2" fill="#52514e">Forward returns go straight to evaluation.py — no</text>
+<text x="41.0" y="1221.1" font-size="10.2" fill="#52514e">prompt has ever seen one. The backtest window opens</text>
+<text x="41.0" y="1234.8" font-size="10.2" fill="#52514e">2024-10-01, past Qwen2.5's training cutoff.</text>
+<rect x="517.0" y="1152.0" width="446.0" height="93.8" rx="7" fill="#ffffff" stroke="#e1e0d9" stroke-width="1.0"/>
+<path d="M520.0,1153.0 L520.0,1244.8" stroke="#eb6834" stroke-width="3" stroke-linecap="round"/>
+<text x="528.0" y="1174.0" font-size="11.6" fill="#0b0b0b" font-weight="600">A run never dies on a bad generation</text>
+<text x="528.0" y="1193.7" font-size="10.2" fill="#52514e">Every LLM call site precomputes its rule twin.</text>
+<text x="528.0" y="1207.4" font-size="10.2" fill="#52514e">Unparseable JSON, a non-numeric score, a ticker off</text>
+<text x="528.0" y="1221.1" font-size="10.2" fill="#52514e">the shortlist, a one-sided book — each falls back and</text>
+<text x="528.0" y="1234.8" font-size="10.2" fill="#52514e">continues; _count_fallbacks() logs the rate per round.</text>
+<rect x="1004.0" y="1152.0" width="446.0" height="93.8" rx="7" fill="#ffffff" stroke="#e1e0d9" stroke-width="1.0"/>
+<path d="M1007.0,1153.0 L1007.0,1244.8" stroke="#2a78d6" stroke-width="3" stroke-linecap="round"/>
+<text x="1015.0" y="1174.0" font-size="11.6" fill="#0b0b0b" font-weight="600">Every run states its own cost</text>
+<text x="1015.0" y="1193.7" font-size="10.2" fill="#52514e">instrumentation.py records calls, prompt/completion</text>
+<text x="1015.0" y="1207.4" font-size="10.2" fill="#52514e">tokens, wall time, latency percentiles and fallbacks</text>
+<text x="1015.0" y="1221.1" font-size="10.2" fill="#52514e">per (date, topology, round), then projects the full</text>
+<text x="1015.0" y="1234.8" font-size="10.2" fill="#52514e">date range. Exact vs estimated is always labelled.</text>
+</g></svg>

@@ -340,7 +340,7 @@ PLACEBO_SHUFFLE_PEERS = False      # the placebo control of §3
 7. T8/T9/T11/T12 builders (each ~20-40 lines given the shared interface).
 8. Placebo shuffle; propagation metrics from `transcript.jsonl`.
 9. Extend `evaluation.monte_carlo_null` to accept per-date book sizes, so a flexible-size manager book
-   can be significance-tested (currently it cannot — see `CLAUDE.md`).
+   can be significance-tested (currently it cannot — `monte_carlo_null` assumes fixed book sizes).
 
 ---
 

@@ -37,7 +37,7 @@ conda activate agents
 
 # vLLM is pre-installed to a dedicated prefix so the job never pip-installs on
 # the clock, and never silently continues without a server (which would grade a
-# rule-based run and label it LLM — the failure mode CLAUDE.md warns about).
+# rule-based run and label it LLM — the silent-fallback failure mode).
 export PYTHONPATH=/project/dtyu/ms3235/vllm_pkgs:${PYTHONPATH:-}
 # REQUIRED: the agents env's optree extension needs GLIBCXX_3.4.31 but system
 # /lib64/libstdc++.so.6 stops at 3.4.29, so `import vllm` dies with an

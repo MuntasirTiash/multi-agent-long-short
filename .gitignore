@@ -20,9 +20,9 @@ results/daily_20260729_205051_rule-based_full-sparse-sector/transcript.jsonl
 results/transcript_sparse-sector-corr_topk_498x32.jsonl
 results/daily_20260730_023813_LLM-transformers_sparse-sector-corr_topk/transcript.jsonl
 
-# Claude Code: local-only settings and nested git worktrees of this repo.
-.claude/settings.local.json
-.claude/worktrees/
+# Local tool state and notes (not part of the project).
+.claude/
+CLAUDE.md
 
 # Local env
 .env

@@ -19,7 +19,7 @@ WHAT GETS LOGGED (to <run_dir>/run.log AND the console):
   * FALLBACKS: every time an agent's (or the manager's) LLM output is unusable
     and the rule-based twin is used instead — with the ticker, round, topology,
     and the RAW model text + parse error. A "LLM" run that is silently mostly
-    rule-based is the main thing we refuse to hide (see CLAUDE.md).
+    rule-based is the main thing we refuse to hide (see README, "Reading results honestly").
   * RANKING after round 0 and after every revision round: the 30 stocks sorted
     by score, each shown with its NEXT-DAY return and the rank-IC of that stage.
   * MEMORY of every agent after each round (its own score/direction history).
